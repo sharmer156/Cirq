@@ -13,34 +13,75 @@
 # limitations under the License.
 
 import cirq
-from cirq.contrib import circuit_to_latex_using_qcircuit
-from cirq.contrib.qcircuit.qcircuit_diagram import _QCircuitQubit
-from cirq.contrib.qcircuit.qcircuit_diagrammable import (
-    _FallbackQCircuitGate,
-)
+import cirq.contrib.qcircuit as ccq
+import cirq.testing as ct
 
 
-def test_QCircuitQubit():
-    p = cirq.NamedQubit('x')
-    q = _QCircuitQubit(p)
-    assert repr(q) == '_QCircuitQubit({!r})'.format(p)
+def assert_has_qcircuit_diagram(
+        actual: cirq.Circuit,
+        desired: str,
+        **kwargs) -> None:
+    """Determines if a given circuit has the desired qcircuit diagram.
 
-    assert q != 0
+    Args:
+        actual: The circuit that was actually computed by some process.
+        desired: The desired qcircuit diagram as a string. Newlines at the
+            beginning and whitespace at the end are ignored.
+        **kwargs: Keyword arguments to be passed to
+            circuit_to_latex_using_qcircuit.
+    """
+    actual_diagram = ccq.circuit_to_latex_using_qcircuit(actual, **kwargs
+            ).lstrip('\n').rstrip()
+    desired_diagram = desired.lstrip("\n").rstrip()
+    assert actual_diagram == desired_diagram, (
+        "Circuit's qcircuit diagram differs from the desired diagram.\n"
+        '\n'
+        'Diagram of actual circuit:\n'
+        '{}\n'
+        '\n'
+        'Desired qcircuit diagram:\n'
+        '{}\n'
+        '\n'
+        'Highlighted differences:\n'
+        '{}\n'.format(actual_diagram, desired_diagram,
+                      ct.highlight_text_differences(actual_diagram,
+                                                 desired_diagram))
+    )
 
-def test_FallbackQCircuitSymbolsGate():
-    class TestGate(cirq.Gate):
+
+def test_fallback_diagram():
+    class MagicGate(cirq.Gate):
         def __str__(self):
-            return 'T'
+            return 'MagicGate'
 
-    g = TestGate()
-    f = _FallbackQCircuitGate(g)
-    assert f.qcircuit_diagram_info(cirq.TextDiagramInfoArgs.UNINFORMED_DEFAULT
-                                   ) == ('\\text{T:0}',)
-    assert f.qcircuit_diagram_info(cirq.TextDiagramInfoArgs(
-        known_qubits=None,
-        known_qubit_count=2,
-        use_unicode_characters=True,
-        precision=None)) == ('\\text{T:0}', '\\text{T:1}')
+    class MagicOp(cirq.Operation):
+        def __init__(self, *qubits):
+            self._qubits = qubits
+
+        def with_qubits(self, *new_qubits):
+            return MagicOp(*new_qubits)
+
+        @property
+        def qubits(self):
+            return self._qubits
+
+        def __str__(self):
+            return 'MagicOperate'
+
+    circuit = cirq.Circuit.from_ops(
+        MagicOp(cirq.NamedQubit('b')),
+        MagicGate().on(cirq.NamedQubit('b'),
+                       cirq.NamedQubit('a'),
+                       cirq.NamedQubit('c')))
+    expected_diagram = r"""
+\Qcircuit @R=1em @C=0.75em {
+ \\
+ &\lstick{\text{a}}& \qw&                           \qw&\gate{\text{\#2}}       \qw    &\qw\\
+ &\lstick{\text{b}}& \qw&\gate{\text{MagicOperate}} \qw&\gate{\text{MagicGate}} \qw\qwx&\qw\\
+ &\lstick{\text{c}}& \qw&                           \qw&\gate{\text{\#3}}       \qw\qwx&\qw\\
+ \\
+}""".strip()
+    assert_has_qcircuit_diagram(circuit, expected_diagram)
 
 
 def test_teleportation_diagram():
@@ -58,13 +99,32 @@ def test_teleportation_diagram():
         cirq.CNOT(car, bob),
         cirq.CZ(ali, bob))
 
-    diagram = circuit_to_latex_using_qcircuit(
-        circuit,
-        qubit_order=cirq.QubitOrder.explicit([ali, car, bob]))
-    assert diagram.strip() == """
-\\Qcircuit @R=1em @C=0.75em { \\\\ 
- \\lstick{\\text{alice}}& \\qw &\\qw & \\gate{\\text{X}^{0.5}} \\qw & \\control \\qw & \\gate{\\text{H}} \\qw & \\meter \\qw &\\qw & \\control \\qw &\\qw\\\\
- \\lstick{\\text{carrier}}& \\qw & \\gate{\\text{H}} \\qw & \\control \\qw & \\targ \\qw \\qwx &\\qw & \\meter \\qw & \\control \\qw &\\qw \\qwx &\\qw\\\\
- \\lstick{\\text{bob}}& \\qw &\\qw & \\targ \\qw \\qwx &\\qw &\\qw &\\qw & \\targ \\qw \\qwx & \\control \\qw \\qwx &\\qw \\\\ 
- \\\\ }
-        """.strip()
+    expected_diagram = r"""
+\Qcircuit @R=1em @C=0.75em {
+ \\
+ &\lstick{\text{alice}}&   \qw&\gate{\text{X}^{0.5}} \qw&         \qw    &\control \qw    &\gate{\text{H}} \qw&\meter   \qw    &\control \qw    &\qw\\
+ &\lstick{\text{carrier}}& \qw&\gate{\text{H}}       \qw&\control \qw    &\targ    \qw\qwx&\meter          \qw&\control \qw    &         \qw\qwx&\qw\\
+ &\lstick{\text{bob}}&     \qw&                      \qw&\targ    \qw\qwx&         \qw    &                \qw&\targ    \qw\qwx&\control \qw\qwx&\qw\\
+ \\
+}""".strip()
+    assert_has_qcircuit_diagram(circuit, expected_diagram,
+            qubit_order=cirq.QubitOrder.explicit([ali, car, bob]))
+
+
+def test_other_diagram():
+    a, b, c = cirq.LineQubit.range(3)
+
+    circuit = cirq.Circuit.from_ops(
+        cirq.X(a),
+        cirq.Y(b),
+        cirq.Z(c))
+
+    expected_diagram = r"""
+\Qcircuit @R=1em @C=0.75em {
+ \\
+ &\lstick{\text{0}}& \qw&\targ           \qw&\qw\\
+ &\lstick{\text{1}}& \qw&\gate{\text{Y}} \qw&\qw\\
+ &\lstick{\text{2}}& \qw&\gate{\text{Z}} \qw&\qw\\
+ \\
+}""".strip()
+    assert_has_qcircuit_diagram(circuit, expected_diagram)

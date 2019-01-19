@@ -26,7 +26,7 @@ def test_repr():
         repetitions=2,
         measurements={'m': np.array([[1, 2]])})
 
-    assert repr(v) == ("TrialResult(params=ParamResolver({'a': 2}), "
+    assert repr(v) == ("cirq.TrialResult(params=cirq.ParamResolver({'a': 2}), "
                        "repetitions=2, measurements={'m': array([[1, 2]])})")
 
 
@@ -132,3 +132,19 @@ def test_multi_measurement_histogram():
         ((False, True), (True,)): 2,
         ((True, False), (False,)): 1,
     })
+
+
+def test_trial_result_equality():
+    et = cirq.testing.EqualsTester()
+    et.add_equality_group(cirq.TrialResult(
+        params=cirq.ParamResolver({}),
+        repetitions=5,
+        measurements={'a': np.array([[0]])}))
+    et.add_equality_group(cirq.TrialResult(
+        params=cirq.ParamResolver({}),
+        repetitions=6,
+        measurements={'a': np.array([[0]])}))
+    et.add_equality_group(cirq.TrialResult(
+        params=cirq.ParamResolver({}),
+        repetitions=5,
+        measurements={'a': np.array([[1]])}))

@@ -23,23 +23,14 @@ from cirq.circuits.qasm_output import (
 from cirq.circuits.circuit import (
     Circuit,
 )
-from cirq.circuits.drop_empty_moments import (
-    DropEmptyMoments,
-)
-from cirq.circuits.drop_negligible import (
-    DropNegligible,
-)
-from cirq.circuits.expand_composite import (
-    ExpandComposite,
+from cirq.circuits.circuit_dag import (
+    CircuitDag,
+    Unique,
 )
 from cirq.circuits.insert_strategy import (
     InsertStrategy,
 )
-from cirq.circuits.moment import (
-    Moment,
-)
 from cirq.circuits.optimization_pass import (
-    OptimizationPass,
     PointOptimizer,
     PointOptimizationSummary,
 )

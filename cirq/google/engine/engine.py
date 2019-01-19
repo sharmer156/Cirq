@@ -30,20 +30,20 @@ import string
 import time
 import urllib.parse
 from collections import Iterable
-from typing import Dict, List, Optional, Union, cast
-
+from typing import cast, Dict, List, Optional, TYPE_CHECKING, Union
 from apiclient import discovery
-from google.protobuf.json_format import MessageToDict
 
-from cirq.api.google.v1 import program_pb2
-from cirq.circuits import Circuit
-from cirq.circuits.drop_empty_moments import DropEmptyMoments
+from cirq import optimizers, circuits
 from cirq.google.convert_to_xmon_gates import ConvertToXmonGates
-from cirq.google.params import sweep_to_proto
-from cirq.google.programs import schedule_to_proto, unpack_results
+from cirq.google.params import sweep_to_proto_dict
+from cirq.google.programs import schedule_to_proto_dicts, unpack_results
 from cirq.schedules import Schedule, moment_by_moment_schedule
 from cirq.study import ParamResolver, Sweep, Sweepable, TrialResult
-from cirq.study.sweeps import Points, Unit, Zip
+from cirq.study.sweeps import Points, UnitSweep, Zip
+
+if TYPE_CHECKING:
+    # pylint: disable=unused-import
+    from typing import Any
 
 gcs_prefix_pattern = re.compile('gs://[a-z0-9._/-]+')
 TERMINAL_STATES = ['SUCCESS', 'FAILURE', 'CANCELLED']
@@ -103,6 +103,19 @@ class JobConfig:
             gcs_prefix=self.gcs_prefix,
             gcs_program=self.gcs_program,
             gcs_results=self.gcs_results)
+
+    def __repr__(self):
+        return ('JobConfig(project_id={!r}, '
+                'program_id={!r}, '
+                'job_id={!r}, '
+                'gcs_prefix={!r}, '
+                'gcs_program={!r}, '
+                'gcs_results={!r})').format(self.project_id,
+                                             self.program_id,
+                                             self.job_id,
+                                             self.gcs_prefix,
+                                             self.gcs_program,
+                                             self.gcs_results)
 
 
 class Engine:
@@ -170,13 +183,13 @@ class Engine:
 
     def run(self,
             *,  # Force keyword args.
-            program: Union[Circuit, Schedule],
+            program: Union[circuits.Circuit, Schedule],
             job_config: Optional[JobConfig] = None,
             param_resolver: ParamResolver = ParamResolver({}),
             repetitions: int = 1,
             priority: int = 50,
             target_route: str = '/xmonsim'
-    ) -> TrialResult:
+            ) -> TrialResult:
         """Runs the supplied Circuit or Schedule via Quantum Engine.
 
         Args:
@@ -281,12 +294,13 @@ class Engine:
         return implied_job_config
 
     def program_as_schedule(self,
-                            program: Union[Circuit, Schedule]) -> Schedule:
-        if isinstance(program, Circuit):
+                            program: Union[circuits.Circuit,
+                                           Schedule]) -> Schedule:
+        if isinstance(program, circuits.Circuit):
             device = program.device
             circuit_copy = program.copy()
             ConvertToXmonGates().optimize_circuit(circuit_copy)
-            DropEmptyMoments().optimize_circuit(circuit_copy)
+            optimizers.DropEmptyMoments().optimize_circuit(circuit_copy)
             device.validate_circuit(circuit_copy)
             return moment_by_moment_schedule(device, circuit_copy)
 
@@ -298,13 +312,13 @@ class Engine:
 
     def run_sweep(self,
                   *,  # Force keyword args.
-                  program: Union[Circuit, Schedule],
+                  program: Union[circuits.Circuit, Schedule],
                   job_config: Optional[JobConfig] = None,
                   params: Sweepable = None,
                   repetitions: int = 1,
                   priority: int = 500,
                   target_route: str = '/xmonsim'
-    ) -> 'EngineJob':
+                  ) -> 'EngineJob':
         """Runs the supplied Circuit or Schedule via Quantum Engine.
 
         In contrast to run, this runs across multiple parameter sweeps, and
@@ -335,14 +349,13 @@ class Engine:
 
         # Create program.
         sweeps = _sweepable_to_sweeps(params or ParamResolver({}))
-        proto_program = program_pb2.Program()
-        for sweep in sweeps:
-            sweep_proto = proto_program.parameter_sweeps.add()
-            sweep_to_proto(sweep, sweep_proto)
-            sweep_proto.repetitions = repetitions
-        program_dict = MessageToDict(proto_program)
-        program_dict['operations'] = [MessageToDict(op) for op in
-                                      schedule_to_proto(schedule)]
+        program_dict = {}  # type: Dict[str, Any]
+
+        program_dict['parameter_sweeps'] = [
+            sweep_to_proto_dict(sweep, repetitions) for
+            sweep in sweeps]
+        program_dict['operations'] = [op for op in
+                                      schedule_to_proto_dicts(schedule)]
         code = {
             '@type': 'type.googleapis.com/cirq.api.google.v1.Program'}
         code.update(program_dict)
@@ -593,10 +606,10 @@ def _sweepable_to_sweeps(sweepable: Sweepable) -> List[Sweep]:
             resolvers = iterable
             return [_resolver_to_sweep(p) for p in resolvers]
     else:
-        raise TypeError('Unexpected Sweepable.') # coverage: ignore
+        raise TypeError('Unexpected Sweepable.')  # coverage: ignore
 
 
 def _resolver_to_sweep(resolver: ParamResolver) -> Sweep:
     return Zip(*[Points(key, [value]) for key, value in
                  resolver.param_dict.items()]) if len(
-        resolver.param_dict) else Unit
+        resolver.param_dict) else UnitSweep

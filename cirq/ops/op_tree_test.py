@@ -38,6 +38,18 @@ def test_flatten_op_tree():
                                       operations[1:5],
                                       operations[5:]))) == operations
 
+    # Flatten moment.
+    assert list(cirq.flatten_op_tree((operations[0],
+                                      cirq.Moment(operations[1:5]),
+                                      operations[5:]))) == operations
+
+    # Don't flatten moment.
+    assert list(cirq.flatten_op_tree((operations[0],
+                                      cirq.Moment(operations[1:5]),
+                                      operations[5:]), preserve_moments=True)
+                ) == ([operations[0], cirq.Moment(operations[1:5])]
+                      + operations[5:])
+
     # Bad trees.
     with pytest.raises(TypeError):
         _ = list(cirq.flatten_op_tree(None))
@@ -85,7 +97,7 @@ def test_transform_bad_tree():
         _ = list(cirq.transform_op_tree(5))
     with pytest.raises(TypeError):
         _ = list(cirq.flatten_op_tree(cirq.transform_op_tree([
-            cirq.GateOperation(cirq.Gate(), [cirq.QubitId()]), (4,)
+            cirq.GateOperation(cirq.Gate(), [cirq.NamedQubit('q')]), (4,)
         ])))
 
 

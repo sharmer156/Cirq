@@ -14,13 +14,14 @@
 
 import inspect
 import sys
-from typing import Dict, List, TYPE_CHECKING
+from typing import Dict, List, Tuple, TYPE_CHECKING
 
 import os
 import re
 
 import pytest
 
+import cirq
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
@@ -30,9 +31,8 @@ if TYPE_CHECKING:
 def test_can_run_readme_code_snippets():
     # Get the contents of the README.md file at the project root.
     readme_path = os.path.join(
-        os.path.dirname(__file__),  # Start at this file's directory.
-        '..', 'docs',  # Hacky check that we're under docs/.
-        '..', 'README.rst')     # Get the readme one level up.
+        os.path.split(os.path.dirname(__file__))[0], 'README.rst')
+    assert readme_path is not None
 
     assert_file_has_working_code_snippets(readme_path, assume_import=False)
 
@@ -50,10 +50,22 @@ def test_can_run_docs_code_snippets(path):
     assert_file_has_working_code_snippets(path, assume_import=True)
 
 
-def find_markdown_code_snippets(content: str) -> List[str]:
-    return re.findall("\n```python(.*?)\n```\n",
-                      content,
-                      re.MULTILINE | re.DOTALL)
+def find_code_snippets(pattern: str, content: str) -> List[Tuple[str, int]]:
+    matches = re.finditer(pattern, content, re.MULTILINE | re.DOTALL)
+    newlines = re.finditer("\n", content)
+    snippets = []
+    current_line = 1
+    for match in matches:
+        for newline in newlines:
+            current_line += 1
+            if newline.start() >= match.start():
+                snippets.append((match.group(1), current_line))
+                break
+    return snippets
+
+
+def find_markdown_code_snippets(content: str) -> List[Tuple[str, int]]:
+    return find_code_snippets("\n```python(.*?)\n```\n", content)
 
 
 def deindent_snippet(snippet: str) -> str:
@@ -74,12 +86,11 @@ def deindent_snippet(snippet: str) -> str:
     return '\n'.join(deindented_lines)
 
 
-def find_rst_code_snippets(content: str) -> List[str]:
-    snippets = re.findall(
-        r'\n.. code-block:: python\n(?:\s+:.*?\n)*\n(.*?)(?:\n\S|\Z)',
-        content,
-        re.MULTILINE | re.DOTALL)
-    return [deindent_snippet(snippet) for snippet in snippets]
+def find_rst_code_snippets(content: str) -> List[Tuple[str, int]]:
+    snippets = find_code_snippets(
+        r'\n.. code-block:: python\n(?:\s+:.*?\n)*\n(.*?)(?:\n\S|\Z)', content)
+    return [(deindent_snippet(content), line_number)
+            for content, line_number in snippets]
 
 
 def test_find_rst_code_snippets():
@@ -108,9 +119,42 @@ More text.
 """)
 
     assert snippets == [
-        'print("hello world")\n',
-        'print("hello 1")\n\nfor i in range(10):\n    print(f"hello {i}")\n',
-        'print("last line")\n',
+        ('print("hello world")\n', 4),
+        ('print("hello 1")\n\nfor i in range(10):\n    print(f"hello {i}")\n',
+         10),
+        ('print("last line")\n', 20),
+    ]
+
+
+def test_find_markdown_code_snippets():
+    snippets = find_markdown_code_snippets("""
+A 3 by 3 grid of qubits using
+
+```python
+print("hello world")
+```
+
+The next level up.
+
+```python
+print("hello 1")
+
+for i in range(10):
+    print(f"hello {i}")
+```
+
+More text.
+
+```python
+print("last line")
+```
+""")
+
+    assert snippets == [
+        ('\nprint("hello world")', 4),
+        ('\nprint("hello 1")\n\nfor i in range(10):\n    print(f"hello {i}")',
+         10),
+        ('\nprint("last line")', 19),
     ]
 
 
@@ -128,7 +172,7 @@ def assert_file_has_working_code_snippets(path: str, assume_import: bool):
     assert_code_snippets_run_in_sequence(snippets, assume_import)
 
 
-def assert_code_snippets_run_in_sequence(snippets: List[str],
+def assert_code_snippets_run_in_sequence(snippets: List[Tuple[str, int]],
                                          assume_import: bool):
     """Checks that a sequence of code snippets actually run.
 
@@ -141,12 +185,21 @@ def assert_code_snippets_run_in_sequence(snippets: List[str],
     if assume_import:
         exec('import cirq', state)
 
-    for snippet in snippets:
-        assert_code_snippet_executes_correctly(snippet, state)
+    for content, line_number in snippets:
+        assert_code_snippet_executes_correctly(content, state, line_number)
 
 
 def _canonicalize_printed_line_chunk(chunk: str) -> str:
     chunk = ' ' + chunk + ' '
+
+    # Reduce trailing '.0' at end of number.
+    chunk = chunk.replace('.0-', '. -')
+    chunk = chunk.replace('.0+', '. +')
+
+    # Remove leading spacing.
+    while '[ ' in chunk:
+        chunk = chunk.replace('[ ', '[')
+
     # Remove sign before zero.
     chunk = chunk.replace('-0 ', '+0 ')
     chunk = chunk.replace('-0. ', '+0. ')
@@ -220,8 +273,14 @@ def test_canonicalize_printed_line():
                           '[ 0.]',
                           '[0.]']}) == 1
 
+    a = '[[ 0.+0.j 1.+0.j]'
+    b = '[[0.+0.j 1.+0.j]'
+    assert canonicalize_printed_line(a) == canonicalize_printed_line(b)
 
-def assert_code_snippet_executes_correctly(snippet: str, state: Dict):
+
+def assert_code_snippet_executes_correctly(snippet: str,
+                                           state: Dict,
+                                           line_number: int = None):
     """Executes a snippet and compares output / errors to annotations."""
 
     raises_annotation = re.search("# raises\s*(\S*)", snippet)
@@ -236,7 +295,7 @@ def assert_code_snippet_executes_correctly(snippet: str, state: Dict):
         if not expected_failure:
             raise AssertionError('No error type specified for # raises line.')
 
-    assert_code_snippet_runs_and_prints_expected(before, state)
+    assert_code_snippet_runs_and_prints_expected(before, state, line_number)
     if expected_failure is not None:
         assert after is not None
         assert_code_snippet_fails(after, state, expected_failure)
@@ -260,7 +319,9 @@ def naive_convert_snippet_code_to_python_2(snippet):
     return snippet.replace('...', 'Ellipsis')
 
 
-def assert_code_snippet_runs_and_prints_expected(snippet: str, state: Dict):
+def assert_code_snippet_runs_and_prints_expected(snippet: str,
+                                                 state: Dict,
+                                                 line_number: int = None):
     """Executes a snippet and compares captured output to annotated output."""
 
     is_python_3 = sys.version_info[0] >= 3
@@ -282,8 +343,11 @@ def assert_code_snippet_runs_and_prints_expected(snippet: str, state: Dict):
         if is_python_3:
             assert_expected_lines_present_in_order(expected_outputs,
                                                    output_lines)
-    except:
-        print('SNIPPET: \n' + _indent([snippet]))
+    except AssertionError as ex:
+        new_msg = ex.args[0] + '\n\nIn snippet{}:\n{}'.format(
+            "" if line_number == None else " (line {})".format(line_number),
+            _indent([snippet]))
+        ex.args = (new_msg,) + tuple(ex.args[1:])
         raise
 
 
@@ -318,11 +382,25 @@ def assert_expected_lines_present_in_order(expected_lines: List[str],
         while i < len(actual_lines) and actual_lines[i] != expected:
             i += 1
 
-        if i >= len(actual_lines):
-            print('ACTUAL LINES: \n' + _indent(actual_lines))
-            print('EXPECTED LINES: \n' + _indent(expected_lines))
-            raise AssertionError(
-                'Missing expected line: {}'.format(expected))
+        assert i < len(actual_lines), (
+            'Missing expected line: {!r}\n'
+            '\n'
+            'Actual lines:\n'
+            '{}\n'
+            '\n'
+            'Expected lines:\n'
+            '{}\n'
+            '\n'
+            'Highlighted Differences:\n'
+            '{}\n'
+            ''.format(
+                expected,
+                _indent(actual_lines),
+                _indent(expected_lines),
+                _indent([cirq.testing.highlight_text_differences(
+                    '\n'.join(actual_lines),
+                    '\n'.join(expected_lines))]))
+        )
         i += 1
 
 
@@ -338,7 +416,6 @@ def find_expected_outputs(snippet: str) -> List[str]:
     skipped instead of included. For example, for random output say
     '# prints something like' to avoid checking the following lines.
     """
-    start_key = '# prints'
     continue_key = '# '
     expected = []
 
@@ -350,10 +427,9 @@ def find_expected_outputs(snippet: str) -> List[str]:
                 expected.append(rest)
             else:
                 printing = False
-        elif line.startswith(start_key):
-            rest = line[len(start_key):]
-            if not rest.strip():
-                printing = True
+        # Matches '# print', '# prints', '# print:', and '# prints:'
+        elif re.match('^#\s*prints?:?\s*$', line):
+            printing = True
 
     return expected
 
@@ -364,7 +440,42 @@ def _indent(lines: List[str]) -> str:
 
 def test_find_expected_outputs():
     assert find_expected_outputs("""
+# print
+# abc
+
+# def
+    """) == ['abc']
+
+    assert find_expected_outputs("""
 # prints
+# abc
+
+# def
+    """) == ['abc']
+
+    assert find_expected_outputs("""
+# print:
+# abc
+
+# def
+    """) == ['abc']
+
+    assert find_expected_outputs("""
+#print:
+# abc
+
+# def
+    """) == ['abc']
+
+    assert find_expected_outputs("""
+# prints:
+# abc
+
+# def
+    """) == ['abc']
+
+    assert find_expected_outputs("""
+# prints:
 # abc
 
 # def

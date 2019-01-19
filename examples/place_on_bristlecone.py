@@ -60,8 +60,8 @@ import cirq
 
 
 def main():
-    print("Length 16 line on Bristlecone:")
-    line = cirq.line_on_device(cirq.google.Bristlecone, length=10)
+    print("Length 10 line on Bristlecone:")
+    line = cirq.google.line_on_device(cirq.google.Bristlecone, length=10)
     print(line)
 
     print("Initial circuit:")

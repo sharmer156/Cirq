@@ -13,15 +13,17 @@
 # limitations under the License.
 
 from itertools import chain
+from typing import Sequence, Dict, Tuple
 
-import cirq
-from cirq.ops import gate_features, Gate, SWAP
+from cirq import protocols
+from cirq.ops import Gate, SWAP, OP_TREE, QubitId
+from cirq.contrib.acquaintance.permutation import (
+        SwapPermutationGate, PermutationGate)
 
 
-class CircularShiftGate(cirq.Gate,
-                        cirq.CompositeGate,
-                        cirq.TextDiagrammable):
-    """Swaps two sets of qubits.
+class CircularShiftGate(PermutationGate):
+    """Performs a cyclical permutation of the qubits to the left by a specified
+    amount.
 
     Args:
         shift: how many positions to circularly left shift the qubits.
@@ -31,11 +33,15 @@ class CircularShiftGate(cirq.Gate,
     def __init__(self,
                  shift: int,
                  swap_gate: Gate=SWAP) -> None:
+        super().__init__(swap_gate)
         self.shift = shift
-        self.swap_gate = swap_gate
 
     def __repr__(self):
-        return 'CircularShiftGate'
+        return ('cirq.contrib.acquaintance.CircularShiftGate(' +
+                str(self.shift) +
+                ('' if self.swap_gate == SWAP else
+                    (', swap_gate=' + repr(self.swap_gate))) +
+                ')')
 
     def __eq__(self, other):
         if not isinstance(other, type(self)):
@@ -43,7 +49,7 @@ class CircularShiftGate(cirq.Gate,
         return ((self.shift == other.shift) and
                 (self.swap_gate == other.swap_gate))
 
-    def default_decompose(self, qubits):
+    def _decompose_(self, qubits: Sequence[QubitId]) -> OP_TREE:
         n = len(qubits)
         left_shift = self.shift % n
         right_shift = n - left_shift
@@ -51,12 +57,13 @@ class CircularShiftGate(cirq.Gate,
                      range(right_shift))
         maxs = chain(range(left_shift, n),
                      range(n - 1, right_shift, -1))
+        swap_gate = SwapPermutationGate(self.swap_gate)
         for i, j in zip(mins, maxs):
             for k in range(i, j, 2):
-                yield self.swap_gate(*qubits[k:k+2])
+                yield swap_gate(*qubits[k:k+2])
 
-    def text_diagram_info(self,
-                          args: gate_features.TextDiagramInfoArgs):
+    def _circuit_diagram_info_(self, args: protocols.CircuitDiagramInfoArgs
+                               ) -> Tuple[str, ...]:
         if args.known_qubit_count is None:
             return NotImplemented
         direction_symbols = (
@@ -67,5 +74,10 @@ class CircularShiftGate(cirq.Gate,
                 str(i) +
                 direction_symbols[int(i < self.shift)]
                 for i in range(args.known_qubit_count))
-        return gate_features.TextDiagramInfo(
-                wire_symbols=wire_symbols)
+        return wire_symbols
+
+    def permutation(self, qubit_count: int) -> Dict[int, int]:
+        shift = self.shift % qubit_count
+        permuted_indices = chain(range(shift, qubit_count),
+                                 range(shift))
+        return {s: i for i, s in enumerate(permuted_indices)}

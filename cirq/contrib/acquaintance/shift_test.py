@@ -13,42 +13,50 @@
 # limitations under the License.
 
 import cirq
-from cirq.circuits import ExpandComposite
-from cirq.contrib.acquaintance.shift import CircularShiftGate
+
+import cirq.contrib.acquaintance as cca
 
 
 def test_circular_shift_gate_init():
-    g = CircularShiftGate(2)
+    g = cca.CircularShiftGate(2)
     assert g.shift == 2
 
-    g = CircularShiftGate(1, swap_gate = cirq.CZ)
+    g = cca.CircularShiftGate(1, swap_gate = cirq.CZ)
     assert g.swap_gate == cirq.CZ
 
 
 def test_circular_shift_gate_unknown_qubit_count():
-    g = CircularShiftGate(2)
-    args = cirq.TextDiagramInfoArgs.UNINFORMED_DEFAULT
-    assert g.text_diagram_info(args) == NotImplemented
+    g = cca.CircularShiftGate(2)
+    assert cirq.circuit_diagram_info(g, default=None) is None
 
 
 def test_circular_shift_gate_eq():
-    a = CircularShiftGate(1)
-    b = CircularShiftGate(1)
-    c = CircularShiftGate(2)
+    a = cca.CircularShiftGate(1)
+    b = cca.CircularShiftGate(1)
+    c = cca.CircularShiftGate(2)
     assert a == b
     assert a != c
 
+def test_circular_shift_gate_permutation():
+    assert (cca.CircularShiftGate(4).permutation(3) ==
+            {0: 2, 1: 0, 2: 1})
+    assert (cca.CircularShiftGate(0).permutation(4) ==
+            {0: 0, 1: 1, 2: 2, 3: 3})
+
+    assert (cca.CircularShiftGate(2).permutation(5) ==
+            {0:3, 1: 4, 2: 0, 3: 1, 4: 2})
+
 
 def test_circular_shift_gate_repr():
-    g = CircularShiftGate(2)
-    assert repr(g) == 'CircularShiftGate'
+    g = cca.CircularShiftGate(2)
+    cirq.testing.assert_equivalent_repr(g)
 
 
 def test_circular_shift_gate_decomposition():
     qubits = [cirq.NamedQubit(q) for q in 'abcdef']
 
-    expander = ExpandComposite()
-    circular_shift = CircularShiftGate(1, cirq.CZ)(*qubits[:2])
+    expander = cirq.ExpandComposite()
+    circular_shift = cca.CircularShiftGate(1, cirq.CZ)(*qubits[:2])
     circuit = cirq.Circuit.from_ops(circular_shift)
     expander.optimize_circuit(circuit)
     expected_circuit = cirq.Circuit(
@@ -57,9 +65,9 @@ def test_circular_shift_gate_decomposition():
 
     no_decomp = lambda op: (isinstance(op, cirq.GateOperation) and
                             op.gate == cirq.SWAP)
-    expander = ExpandComposite(no_decomp=no_decomp)
+    expander = cirq.ExpandComposite(no_decomp=no_decomp)
 
-    circular_shift = CircularShiftGate(3)(*qubits)
+    circular_shift = cca.CircularShiftGate(3)(*qubits)
     circuit = cirq.Circuit.from_ops(circular_shift)
     expander.optimize_circuit(circuit)
     actual_text_diagram = circuit.to_text_diagram().strip()
@@ -78,7 +86,7 @@ f: ───────────×───────────
     """.strip()
     assert actual_text_diagram == expected_text_diagram
 
-    circular_shift = CircularShiftGate(2)(*qubits)
+    circular_shift = cca.CircularShiftGate(2)(*qubits)
     circuit = cirq.Circuit.from_ops(circular_shift)
     expander.optimize_circuit(circuit)
     actual_text_diagram = circuit.to_text_diagram().strip()
@@ -100,7 +108,7 @@ f: ───────────────×───────
 
 def test_circular_shift_gate_wire_symbols():
     qubits = [cirq.NamedQubit(q) for q in 'xyz']
-    circuit = cirq.Circuit.from_ops(CircularShiftGate(2)(*qubits))
+    circuit = cirq.Circuit.from_ops(cca.CircularShiftGate(2)(*qubits))
     actual_text_diagram = circuit.to_text_diagram().strip()
     expected_text_diagram = """
 x: ───╲0╱───
