@@ -22,11 +22,11 @@ from cirq.contrib.paulistring import (
 
 def test_convert():
     q0, q1 = cirq.LineQubit.range(2)
-    circuit = cirq.Circuit.from_ops(
+    circuit = cirq.Circuit(
         cirq.X(q0),
-        cirq.Y(q1) ** 0.5,
-        cirq.Z(q0) ** -0.5,
-        cirq.Z(q1) ** 0,
+        cirq.Y(q1)**0.5,
+        cirq.Z(q0)**-0.5,
+        cirq.Z(q1)**0,
         cirq.H(q0),
     )
     c_orig = cirq.Circuit(circuit)
@@ -35,10 +35,9 @@ def test_convert():
     assert all(isinstance(op.gate, cirq.SingleQubitCliffordGate)
                for op in circuit.all_operations())
 
-    cirq.testing.assert_allclose_up_to_global_phase(
-        circuit.to_unitary_matrix(),
-        c_orig.to_unitary_matrix(),
-        atol=1e-7)
+    cirq.testing.assert_allclose_up_to_global_phase(circuit.unitary(),
+                                                    c_orig.unitary(),
+                                                    atol=1e-7)
 
     cirq.testing.assert_has_diagram(circuit, """
 0: ───X───────Z^-0.5───H───
@@ -49,9 +48,7 @@ def test_convert():
 
 def test_non_clifford_known_matrix():
     q0 = cirq.LineQubit(0)
-    circuit = cirq.Circuit.from_ops(
-        cirq.Z(q0) ** 0.25,
-    )
+    circuit = cirq.Circuit(cirq.Z(q0)**0.25,)
     c_orig = cirq.Circuit(circuit)
 
     ConvertToSingleQubitCliffordGates(ignore_failures=True) \
@@ -66,9 +63,7 @@ def test_non_clifford_known_matrix():
 
 def test_already_converted():
     q0 = cirq.LineQubit(0)
-    circuit = cirq.Circuit.from_ops(
-        cirq.SingleQubitCliffordGate.H(q0),
-    )
+    circuit = cirq.Circuit(cirq.SingleQubitCliffordGate.H(q0),)
     c_orig = cirq.Circuit(circuit)
     ConvertToSingleQubitCliffordGates().optimize_circuit(circuit)
 
@@ -76,7 +71,7 @@ def test_already_converted():
 
 
 def test_convert_composite():
-    class CompositeDummy(cirq.Gate):
+    class CompositeDummy(cirq.TwoQubitGate):
         def _decompose_(self, qubits):
             q0, q1 = qubits
             yield cirq.X(q0)
@@ -84,19 +79,16 @@ def test_convert_composite():
             yield cirq.H(q0)
 
     q0, q1 = cirq.LineQubit.range(2)
-    circuit = cirq.Circuit.from_ops(
-        CompositeDummy()(q0, q1)
-    )
+    circuit = cirq.Circuit(CompositeDummy()(q0, q1))
     c_orig = cirq.Circuit(circuit)
     ConvertToSingleQubitCliffordGates().optimize_circuit(circuit)
 
     assert all(isinstance(op.gate, cirq.SingleQubitCliffordGate)
                for op in circuit.all_operations())
 
-    cirq.testing.assert_allclose_up_to_global_phase(
-        circuit.to_unitary_matrix(),
-        c_orig.to_unitary_matrix(),
-        atol=1e-7)
+    cirq.testing.assert_allclose_up_to_global_phase(circuit.unitary(),
+                                                    c_orig.unitary(),
+                                                    atol=1e-7)
 
     cirq.testing.assert_has_diagram(circuit, """
 0: ───X───────H───
@@ -106,13 +98,11 @@ def test_convert_composite():
 
 
 def test_ignore_unsupported_gate():
-    class UnsupportedDummy(cirq.Gate):
+    class UnsupportedDummy(cirq.TwoQubitGate):
         pass
 
     q0, q1 = cirq.LineQubit.range(2)
-    circuit = cirq.Circuit.from_ops(
-        UnsupportedDummy()(q0, q1),
-    )
+    circuit = cirq.Circuit(UnsupportedDummy()(q0, q1),)
     c_orig = cirq.Circuit(circuit)
     ConvertToSingleQubitCliffordGates(ignore_failures=True) \
         .optimize_circuit(circuit)
@@ -121,13 +111,11 @@ def test_ignore_unsupported_gate():
 
 
 def test_fail_unsupported_gate():
-    class UnsupportedDummy(cirq.Gate):
+    class UnsupportedDummy(cirq.TwoQubitGate):
         pass
 
     q0, q1 = cirq.LineQubit.range(2)
-    circuit = cirq.Circuit.from_ops(
-        UnsupportedDummy()(q0, q1),
-    )
+    circuit = cirq.Circuit(UnsupportedDummy()(q0, q1),)
     with pytest.raises(TypeError):
         ConvertToSingleQubitCliffordGates().optimize_circuit(circuit)
 

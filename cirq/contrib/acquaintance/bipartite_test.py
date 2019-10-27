@@ -17,7 +17,6 @@ import itertools
 import pytest
 
 import cirq
-
 import cirq.contrib.acquaintance as cca
 
 
@@ -226,7 +225,7 @@ circuit_diagrams = {
 def test_circuit_diagrams(part_size, subgraph):
     qubits = cirq.LineQubit.range(2 * part_size)
     gate = cca.BipartiteSwapNetworkGate(subgraph, part_size)
-    circuit = cirq.Circuit.from_ops(gate(*qubits))
+    circuit = cirq.Circuit(gate(*qubits))
     diagram = circuit_diagrams['undecomposed', subgraph, part_size]
     cirq.testing.assert_has_diagram(circuit, diagram)
 
@@ -234,13 +233,13 @@ def test_circuit_diagrams(part_size, subgraph):
         (cca.AcquaintanceOpportunityGate, cca.SwapPermutationGate)))
     expander = cirq.ExpandComposite(no_decomp=no_decomp)
     expander(circuit)
-    print(circuit)
     diagram = circuit_diagrams['decomposed', subgraph, part_size]
     cirq.testing.assert_has_diagram(circuit, diagram)
 
 
 def test_bad_args():
-    gate = cca.BipartiteSwapNetworkGate(cca.BipartiteGraphType.COMPLETE, 2)
+    gate = cca.BipartiteSwapNetworkGate(
+            cca.BipartiteGraphType.COMPLETE, 2)
     qubits = cirq.LineQubit.range(4)
     gate.subgraph = 'not a subgraph'
     args = cirq.CircuitDiagramInfoArgs(
@@ -257,12 +256,6 @@ def test_bad_args():
         gate._circuit_diagram_info_(args)
 
     with pytest.raises(ValueError):
-        gate.permutation(3)
-
-    with pytest.raises(NotImplementedError):
-        gate.permutation(4)
-
-    with pytest.raises(ValueError):
         gate._decompose_(qubits[:3])
 
     gate.subgraph = 'unimplemented subgraph'
@@ -276,7 +269,8 @@ def test_bad_args():
 
 def test_bipartite_swap_network_acquaintance_size():
     qubits = cirq.LineQubit.range(4)
-    gate = cca.BipartiteSwapNetworkGate(cca.BipartiteGraphType.COMPLETE, 2)
+    gate = cca.BipartiteSwapNetworkGate(
+            cca.BipartiteGraphType.COMPLETE, 2)
     assert cca.get_acquaintance_size(gate(*qubits)) == 2
 
 
@@ -284,6 +278,9 @@ def test_bipartite_swap_network_acquaintance_size():
         itertools.product(cca.BipartiteGraphType, range(1, 3)))
 def test_repr(subgraph, part_size):
     gate = cca.BipartiteSwapNetworkGate(subgraph, part_size)
+    cirq.testing.assert_equivalent_repr(gate)
+
+    gate = cca.BipartiteSwapNetworkGate(subgraph, part_size, cirq.ZZ)
     cirq.testing.assert_equivalent_repr(gate)
 
 
@@ -294,5 +291,5 @@ def test_decomposition_permutation_consistency(part_size, subgraph):
     qubits = cirq.LineQubit.range(2 * part_size)
     mapping = {q: i for i, q in enumerate(qubits)}
     cca.update_mapping(mapping, gate._decompose_(qubits))
-    permutation = gate.permutation(2 * part_size)
+    permutation = gate.permutation()
     assert {qubits[i]: j for i, j in permutation.items()} == mapping

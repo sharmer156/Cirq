@@ -12,24 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Sequence, Tuple, Union
+from typing import List, Sequence, Tuple, cast, Dict
 
 import numpy as np
 
 from cirq import value, protocols
+from cirq._compat import proper_repr
 from cirq.ops import raw_types, gate_features, common_gates, eigen_gate, \
         op_tree, pauli_gates
 from cirq.ops.clifford_gate import SingleQubitCliffordGate
 
 
-pauli_eigen_map = {
-    pauli_gates.X: (np.array([[0.5,  0.5], [0.5,   0.5]]),
-                    np.array([[0.5, -0.5], [-0.5,  0.5]])),
-    pauli_gates.Y: (np.array([[0.5, -0.5j], [0.5j,  0.5]]),
-                    np.array([[0.5,  0.5j], [-0.5j, 0.5]])),
-    pauli_gates.Z: (np.diag([1, 0]),
-                    np.diag([0, 1])),
-}
+pauli_eigen_map = cast(
+    Dict[pauli_gates.Pauli, np.ndarray], {
+        pauli_gates.X: (np.array([[0.5, 0.5], [0.5, 0.5]
+                                 ]), np.array([[0.5, -0.5], [-0.5, 0.5]])),
+        pauli_gates.Y: (np.array([[0.5, -0.5j], [0.5j, 0.5]
+                                 ]), np.array([[0.5, 0.5j], [-0.5j, 0.5]])),
+        pauli_gates.Z: (np.diag([1, 0]), np.diag([0, 1])),
+    })
 
 
 @value.value_equality
@@ -40,10 +41,12 @@ class PauliInteractionGate(eigen_gate.EigenGate,
     CNOT = None  # type: PauliInteractionGate
 
     def __init__(self,
-                 pauli0: pauli_gates.Pauli, invert0: bool,
-                 pauli1: pauli_gates.Pauli, invert1: bool,
+                 pauli0: pauli_gates.Pauli,
+                 invert0: bool,
+                 pauli1: pauli_gates.Pauli,
+                 invert1: bool,
                  *,
-                 exponent: Union[value.Symbol, float] = 1.0) -> None:
+                 exponent: value.TParamVal = 1.0) -> None:
         """
         Args:
             pauli0: The interaction axis for the first qubit.
@@ -71,8 +74,8 @@ class PauliInteractionGate(eigen_gate.EigenGate,
             return 0
         return index
 
-    def _with_exponent(self, exponent: Union[value.Symbol, float]
-                       ) -> 'PauliInteractionGate':
+    def _with_exponent(self,
+                       exponent: value.TParamVal) -> 'PauliInteractionGate':
         return PauliInteractionGate(self.pauli0, self.invert0,
                                     self.pauli1, self.invert1,
                                     exponent=exponent)
@@ -86,7 +89,7 @@ class PauliInteractionGate(eigen_gate.EigenGate,
         comp0 = np.eye(4) - comp1
         return [(0, comp0), (1, comp1)]
 
-    def _decompose_(self, qubits: Sequence[raw_types.QubitId]
+    def _decompose_(self, qubits: Sequence[raw_types.Qid]
                           ) -> op_tree.OP_TREE:
         q0, q1 = qubits
         right_gate0 = SingleQubitCliffordGate.from_single_map(
@@ -102,9 +105,13 @@ class PauliInteractionGate(eigen_gate.EigenGate,
         yield right_gate0(q0)
         yield right_gate1(q1)
 
-    def _circuit_diagram_info_(self, args: protocols.CircuitDiagramInfoArgs
-                               ) -> protocols.CircuitDiagramInfo:
-        labels = {pauli_gates.X: 'X', pauli_gates.Y: 'Y', pauli_gates.Z: '@'}
+    def _circuit_diagram_info_(self, args: 'protocols.CircuitDiagramInfoArgs'
+                              ) -> 'protocols.CircuitDiagramInfo':
+        labels = cast(Dict[pauli_gates.Pauli, np.ndarray], {
+            pauli_gates.X: 'X',
+            pauli_gates.Y: 'Y',
+            pauli_gates.Z: '@'
+        })
         l0 = labels[self.pauli0]
         l1 = labels[self.pauli1]
         # Add brackets around letter if inverted
@@ -120,7 +127,7 @@ class PauliInteractionGate(eigen_gate.EigenGate,
         if self._exponent == 1:
             return base
 
-        return '({}**{!r})'.format(base, self._exponent)
+        return '({}**{})'.format(base, proper_repr(self._exponent))
 
 
 PauliInteractionGate.CZ = PauliInteractionGate(

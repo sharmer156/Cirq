@@ -24,3 +24,18 @@ docs/generated
 
 # swap files
 *.swp
+
+# Mac only
+.DS_Store
+
+# From pytest-benchmark
+*.benchmarks/
+
+# Ignore generated Jupyter files
+*.ipynb_checkpoints/
+
+# Ignore Bazel files
+/bazel-*
+
+# Default pycharm virtual env
+.venv/

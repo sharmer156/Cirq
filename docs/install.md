@@ -21,7 +21,7 @@ That way you have control over when a breaking change affects you.
 
 ### Installing on Linux
 
-0. Make sure you have python 3.5.2 or greater (or else python 2.7).
+0. Make sure you have python 3.6.0 or greater.
 
     See [Installing Python 3 on Linux](https://docs.python-guide.org/starting/install3/linux/) @ the hitchhiker's guide to python.
 
@@ -30,17 +30,24 @@ That way you have control over when a breaking change affects you.
 2. Use `pip` to install `cirq`:
 
     ```bash
-    pip install --upgrade pip
-    pip install cirq
+    python -m pip install --upgrade pip
+    python -m pip install cirq
     ```
 
-3. (Optional) install system dependencies that pip can't handle.
+3. (Optional) install other dependencies.
+
+    Install dependencies of features in `cirq.contrib`.
 
     ```bash
-    sudo apt-get install python3-tk texlive-latex-base latexmk
+    python -m pip install cirq[contrib]
     ```
 
-    - Without `python3-tk`, plotting functionality won't work.
+    Install system dependencies that pip can't handle.
+
+    ```bash
+    sudo apt-get install texlive-latex-base latexmk
+    ```
+
     - Without `texlive-latex-base` and `latexmk`, pdf writing functionality will not work.
 
 4. Check that it works!
@@ -57,7 +64,7 @@ That way you have control over when a breaking change affects you.
 
 ### Installing on Mac OS X
 
-0. Make sure you have python 3.5 or greater (or else python 2.7).
+0. Make sure you have python 3.5 or greater.
 
     See [Installing Python 3 on Mac OS X](https://docs.python-guide.org/starting/install3/osx/) @ the hitchhiker's guide to python.
 
@@ -66,11 +73,25 @@ That way you have control over when a breaking change affects you.
 2. Use `pip` to install `cirq`:
 
     ```bash
-    pip install --upgrade pip
-    pip install cirq
+    python -m pip install --upgrade pip
+    python -m pip install cirq
     ```
 
-3. Check that it works!
+3. (Optional) install dependencies of features in `cirq.contrib`.
+
+    ```bash
+    python -m pip install cirq[contrib]
+    ```
+
+    Install system dependencies that pip can't handle.
+
+    ```bash
+    brew cask install mactex
+    ```
+
+    - Without `mactex`, pdf writing functionality will not work.
+
+4. Check that it works!
 
     ```bash
     python -c 'import cirq; print(cirq.google.Foxtail)'
@@ -86,7 +107,7 @@ That way you have control over when a breaking change affects you.
 
 0. If you are using the [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/about), use the [Linux install instructions](#installing-on-linux) instead of these instructions.
 
-1. Make sure you have python 3.5 or greater (or else python 2.7.9+).
+1. Make sure you have python 3.5 or greater.
 
     See [Installing Python 3 on Windows](https://docs.python-guide.org/starting/install3/win/) @ the hitchhiker's guide to python.
 
@@ -97,7 +118,13 @@ That way you have control over when a breaking change affects you.
     python -m pip install cirq
     ```
 
-3. Check that it works!
+3. (Optional) install dependencies of features in `cirq.contrib`.
+
+    ```bash
+    python -m pip install cirq[contrib]
+    ```
+
+4. Check that it works!
 
     ```bash
     python -c "import cirq; print(cirq.google.Foxtail)"
@@ -111,21 +138,19 @@ That way you have control over when a breaking change affects you.
 
 ### Installing on Docker
 
-This will create a Docker image containing Cirq's source code. It will isolate a Cirq installation from the rest of the system.
+This will use a Docker image that will isolate Cirq's installation from the rest of the system.
 
 0. [Install Docker](https://docs.docker.com/install/#supported-platforms) on your host sytem.
 
-1. Build the docker image for your system:
+1. Pull the docker image:
     ```bash
-    git clone https://github.com/quantumlib/Cirq
-    cd Cirq
-    docker build -t cirq/cirq . # This builds the actual image based on latest Ubuntu, and installs Cirq with the needed dependencies.
+    docker pull quantumlib/cirq
      ```
 
 2. Check that it works!
 
     ```bash
-    docker run -it cirq/cirq python3 -c "import cirq; print(cirq.google.Foxtail)"
+    docker run -it quantumlib/cirq python -c "import cirq; print(cirq.google.Foxtail)"
     # should print:
     # (0, 0)───(0, 1)───(0, 2)───(0, 3)───(0, 4)───(0, 5)───(0, 6)───(0, 7)───(0, 8)───(0, 9)───(0, 10)
     # │        │        │        │        │        │        │        │        │        │        │
@@ -133,8 +158,8 @@ This will create a Docker image containing Cirq's source code. It will isolate a
     # (1, 0)───(1, 1)───(1, 2)───(1, 3)───(1, 4)───(1, 5)───(1, 6)───(1, 7)───(1, 8)───(1, 9)───(1, 10)
     ```
 
-3. You can use the created image as:
+3. To run the image:
     ```bash
-    docker run -it cirq/cirq
+    docker run -it quantumlib/cirq
      ```
 

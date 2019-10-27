@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Quantum circuit to prepare the BCS ground states for
+r"""Quantum circuit to prepare the BCS ground states for
 superconductors/superfluids. Such states can be prepared by
 applying pairwise Bogoliubov transformations on basis states
 with opposite spins and momenta, followed by the fermionic Fourier
@@ -160,7 +160,7 @@ def main():
     print('On-site interaction strength = ', u)
     print('Superconducting gap = ', delta, '\n')
 
-    bog_circuit = cirq.Circuit.from_ops(
+    bog_circuit = cirq.Circuit(
         bogoliubov_trans(upper_qubits[i], lower_qubits[i], bog_theta[i])
         for i in range(n_site))
     bog_circuit = cirq.google.optimized_for_xmon(bog_circuit)
@@ -170,7 +170,7 @@ def main():
     # The inverse fermionic Fourier transformation on the spin-up states
     print(('Circuit for the inverse fermionic Fourier transformation on the '
            'spin-up states:'))
-    fourier_circuit_spin_up = cirq.Circuit.from_ops(
+    fourier_circuit_spin_up = cirq.Circuit(
         fermi_fourier_trans_inverse_4(upper_qubits),
         strategy=cirq.InsertStrategy.EARLIEST)
     fourier_circuit_spin_up = cirq.google.optimized_for_xmon(
@@ -180,7 +180,7 @@ def main():
     # The inverse fermionic Fourier transformation on the spin-down states
     print(('Circuit for the inverse fermionic Fourier transformation on the '
            'spin-down states:'))
-    fourier_circuit_spin_down = cirq.Circuit.from_ops(
+    fourier_circuit_spin_down = cirq.Circuit(
         fermi_fourier_trans_inverse_conjugate_4(lower_qubits),
         strategy=cirq.InsertStrategy.EARLIEST)
     fourier_circuit_spin_down = cirq.google.optimized_for_xmon(
@@ -202,7 +202,7 @@ def fswap(p, q):
 
 
 def bogoliubov_trans(p, q, theta):
-    """The 2-mode Bogoliubov transformation is mapped to two-qubit operations.
+    r"""The 2-mode Bogoliubov transformation is mapped to two-qubit operations.
      We use the identity X S^\dag X S X = Y X S^\dag Y S X = X to transform
      the Hamiltonian XY+YX to XX+YY type. The time evolution of the XX + YY
      Hamiltonian can be expressed as a power of the iSWAP gate.

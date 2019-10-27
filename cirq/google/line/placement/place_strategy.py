@@ -18,7 +18,6 @@ import abc
 from cirq.google.line.placement.sequence import GridQubitLineTuple
 
 if TYPE_CHECKING:
-    # pylint: disable=unused-import
     import cirq.google
 
 
@@ -42,4 +41,3 @@ class LinePlacementStrategy(metaclass=abc.ABCMeta):
         Returns:
             Linear sequences found on the chip.
         """
-        pass

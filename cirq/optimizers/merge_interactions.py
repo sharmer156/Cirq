@@ -51,10 +51,10 @@ class MergeInteractions(circuits.PointOptimizer):
                                      if len(old_op.qubits) == 2])
 
         switch_to_new = False
-        switch_to_new |= any(len(old_op.qubits) == 2 and
-                             not (isinstance(old_op, ops.GateOperation) and
-                                  isinstance(old_op.gate, ops.CZPowGate))
-                             for old_op in old_operations)
+        switch_to_new |= any(
+            len(old_op.qubits) == 2 and
+            not isinstance(old_op.gate, ops.CZPowGate)
+            for old_op in old_operations)
         if not self.allow_partial_czs:
             switch_to_new |= any(isinstance(old_op, ops.GateOperation) and
                                  isinstance(old_op.gate, ops.CZPowGate)
@@ -87,10 +87,8 @@ class MergeInteractions(circuits.PointOptimizer):
             clear_qubits=op.qubits,
             new_operations=new_operations)
 
-    def _op_to_matrix(self,
-                      op: Optional[ops.Operation],
-                      qubits: Tuple[ops.QubitId, ...]
-                      ) -> Optional[np.ndarray]:
+    def _op_to_matrix(self, op: ops.Operation,
+                      qubits: Tuple[ops.Qid, ...]) -> Optional[np.ndarray]:
         """Determines the effect of an operation on the given qubits.
 
         If the operation is a 1-qubit operation on one of the given qubits,
@@ -106,6 +104,9 @@ class MergeInteractions(circuits.PointOptimizer):
         Returns:
             None, or else a matrix equivalent to the effect of the operation.
         """
+        if any(q not in qubits for q in op.qubits):
+            return None
+
         q1, q2 = qubits
 
         matrix = protocols.unitary(op, None)
@@ -128,7 +129,7 @@ class MergeInteractions(circuits.PointOptimizer):
             self,
             circuit: circuits.Circuit,
             index: Optional[int],
-            qubits: Tuple[ops.QubitId, ...]
+            qubits: Tuple[ops.Qid, ...]
     ) -> Tuple[List[ops.Operation], List[int], np.ndarray]:
         """Accumulates operations affecting the given pair of qubits.
 

@@ -26,10 +26,13 @@ User Documentation
     tutorial
     circuits
     gates
+    noise
     simulation
     schedules
+    qudits
     development
     examples
+    dev/plotting
 
 
 API Reference

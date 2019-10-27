@@ -50,7 +50,8 @@ def assert_has_qcircuit_diagram(
 
 
 def test_fallback_diagram():
-    class MagicGate(cirq.Gate):
+    class MagicGate(cirq.ThreeQubitGate):
+
         def __str__(self):
             return 'MagicGate'
 
@@ -68,10 +69,9 @@ def test_fallback_diagram():
         def __str__(self):
             return 'MagicOperate'
 
-    circuit = cirq.Circuit.from_ops(
+    circuit = cirq.Circuit(
         MagicOp(cirq.NamedQubit('b')),
-        MagicGate().on(cirq.NamedQubit('b'),
-                       cirq.NamedQubit('a'),
+        MagicGate().on(cirq.NamedQubit('b'), cirq.NamedQubit('a'),
                        cirq.NamedQubit('c')))
     expected_diagram = r"""
 \Qcircuit @R=1em @C=0.75em {
@@ -89,14 +89,10 @@ def test_teleportation_diagram():
     car = cirq.NamedQubit('carrier')
     bob = cirq.NamedQubit('bob')
 
-    circuit = cirq.Circuit.from_ops(
-        cirq.H(car),
-        cirq.CNOT(car, bob),
-        cirq.X(ali)**0.5,
-        cirq.CNOT(ali, car),
-        cirq.H(ali),
-        [cirq.measure(ali), cirq.measure(car)],
-        cirq.CNOT(car, bob),
+    circuit = cirq.Circuit(
+        cirq.H(car), cirq.CNOT(car, bob),
+        cirq.X(ali)**0.5, cirq.CNOT(ali, car), cirq.H(ali),
+        [cirq.measure(ali), cirq.measure(car)], cirq.CNOT(car, bob),
         cirq.CZ(ali, bob))
 
     expected_diagram = r"""
@@ -114,10 +110,7 @@ def test_teleportation_diagram():
 def test_other_diagram():
     a, b, c = cirq.LineQubit.range(3)
 
-    circuit = cirq.Circuit.from_ops(
-        cirq.X(a),
-        cirq.Y(b),
-        cirq.Z(c))
+    circuit = cirq.Circuit(cirq.X(a), cirq.Y(b), cirq.Z(c))
 
     expected_diagram = r"""
 \Qcircuit @R=1em @C=0.75em {
@@ -128,3 +121,15 @@ def test_other_diagram():
  \\
 }""".strip()
     assert_has_qcircuit_diagram(circuit, expected_diagram)
+
+def test_qcircuit_qubit_namer():
+    from cirq.contrib.qcircuit import qcircuit_diagram
+
+    assert(qcircuit_diagram.qcircuit_qubit_namer(cirq.NamedQubit('q'))
+           == r'\lstick{\text{q}}&')
+    assert(qcircuit_diagram.qcircuit_qubit_namer(cirq.NamedQubit('q_1'))
+           == r'\lstick{\text{q\_1}}&')
+    assert(qcircuit_diagram.qcircuit_qubit_namer(cirq.NamedQubit('q^1'))
+           == r'\lstick{\text{q\textasciicircum{}1}}&')
+    assert(qcircuit_diagram.qcircuit_qubit_namer(cirq.NamedQubit('q_{1}'))
+           == r'\lstick{\text{q\_\{1\}}}&')

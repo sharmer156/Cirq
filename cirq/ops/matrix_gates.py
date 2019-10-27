@@ -14,20 +14,21 @@
 
 """Quantum gates defined by a matrix."""
 
-from typing import cast, Any
+from typing import cast, Any, Tuple, List
 
 import numpy as np
 
 from cirq import linalg, protocols
-from cirq.ops import raw_types
+from cirq._compat import proper_repr
+from cirq.ops import gate_features
 
 
 def _phase_matrix(turns: float) -> np.ndarray:
     return np.diag([1, np.exp(2j * np.pi * turns)])
 
 
-class SingleQubitMatrixGate(raw_types.Gate):
-    """A 1-qubit gate defined by its matrix.
+class SingleQubitMatrixGate(gate_features.SingleQubitGate):
+    """A 1-qubit or qudit gate defined by its matrix.
 
     More general than specialized classes like `ZPowGate`, but more expensive
     and more float-error sensitive to work with (due to using
@@ -41,11 +42,17 @@ class SingleQubitMatrixGate(raw_types.Gate):
         Args:
             matrix: The matrix that defines the gate.
         """
-        if matrix.shape != (2, 2) or not linalg.is_unitary(matrix):
-            raise ValueError('Not a 2x2 unitary matrix: {}'.format(matrix))
+        if (len(matrix.shape) != 2 or matrix.shape[0] != matrix.shape[1] or
+                not linalg.is_unitary(matrix)):
+            raise ValueError(
+                'Not a 2x2 (or d x d) unitary matrix: {}'.format(matrix))
         self._matrix = matrix
 
+    def _qid_shape_(self) -> Tuple[int]:
+        return (self._matrix.shape[0],)
+
     def validate_args(self, qubits):
+        super().validate_args(qubits)
         if len(qubits) != 1:
             raise ValueError(
                 'Single-qubit gate applied to multiple qubits: {}({})'.format(
@@ -58,12 +65,10 @@ class SingleQubitMatrixGate(raw_types.Gate):
         new_mat = linalg.map_eigenvalues(self._matrix, lambda b: b**e)
         return SingleQubitMatrixGate(new_mat)
 
-    def _trace_distance_bound_(self):
-        vals = np.linalg.eigvals(self._matrix)
-        rotation_angle = abs(np.angle(vals[0] / vals[1]))
-        return rotation_angle * 1.2
-
-    def _phase_by_(self, phase_turns: float, qubit_index: int):
+    def _phase_by_(self, phase_turns: float,
+                   qubit_index: int) -> 'SingleQubitMatrixGate':
+        if not isinstance(phase_turns, (int, float)):
+            return NotImplemented
         z = _phase_matrix(phase_turns)
         phased_matrix = z.dot(self._matrix).dot(np.conj(z.T))
         return SingleQubitMatrixGate(phased_matrix)
@@ -74,8 +79,8 @@ class SingleQubitMatrixGate(raw_types.Gate):
     def _unitary_(self) -> np.ndarray:
         return np.array(self._matrix)
 
-    def _circuit_diagram_info_(self, args: protocols.CircuitDiagramInfoArgs
-                               ) -> protocols.CircuitDiagramInfo:
+    def _circuit_diagram_info_(self, args: 'protocols.CircuitDiagramInfoArgs'
+                              ) -> 'protocols.CircuitDiagramInfo':
         return protocols.CircuitDiagramInfo(
             wire_symbols=(_matrix_to_diagram_symbol(self._matrix, args),))
 
@@ -83,30 +88,28 @@ class SingleQubitMatrixGate(raw_types.Gate):
         vals = tuple(v for _, v in np.ndenumerate(self._matrix))
         return hash((SingleQubitMatrixGate, vals))
 
-    def approx_eq(self, other, ignore_global_phase=True):
+    def _approx_eq_(self, other: Any, atol) -> bool:
         if not isinstance(other, type(self)):
             return NotImplemented
-        cmp = (linalg.allclose_up_to_global_phase if ignore_global_phase
-               else np.allclose)
-        return cmp(self._matrix, other._matrix)
+        return np.allclose(self._matrix, other._matrix, rtol=0, atol=atol)
 
     def __eq__(self, other):
         if not isinstance(other, type(self)):
             return NotImplemented
-        return np.alltrue(self._matrix == other._matrix)
+        return np.array_equal(self._matrix, other._matrix)
 
     def __ne__(self, other):
         return not self == other
 
     def __repr__(self):
         return 'cirq.SingleQubitMatrixGate({})'.format(
-                _numpy_array_repr(self._matrix))
+            proper_repr(self._matrix))
 
     def __str__(self):
         return str(self._matrix.round(3))
 
 
-class TwoQubitMatrixGate(raw_types.Gate):
+class TwoQubitMatrixGate(gate_features.TwoQubitGate):
     """A 2-qubit gate defined only by its matrix.
 
     More general than specialized classes like `CZPowGate`, but more expensive
@@ -127,6 +130,7 @@ class TwoQubitMatrixGate(raw_types.Gate):
         self._matrix = matrix
 
     def validate_args(self, qubits):
+        super().validate_args(qubits)
         if len(qubits) != 2:
             raise ValueError(
                 'Two-qubit gate not applied to two qubits: {}({})'.format(
@@ -139,25 +143,26 @@ class TwoQubitMatrixGate(raw_types.Gate):
         new_mat = linalg.map_eigenvalues(self._matrix, lambda b: b**e)
         return TwoQubitMatrixGate(new_mat)
 
-    def _phase_by_(self, phase_turns: float, qubit_index: int):
+    def _phase_by_(self, phase_turns: float,
+                   qubit_index: int) -> 'TwoQubitMatrixGate':
+        if not isinstance(phase_turns, (int, float)):
+            return NotImplemented
         i = np.eye(2)
         z = _phase_matrix(phase_turns)
         z2 = np.kron(i, z) if qubit_index else np.kron(z, i)
         phased_matrix = z2.dot(self._matrix).dot(np.conj(z2.T))
         return TwoQubitMatrixGate(phased_matrix)
 
-    def approx_eq(self, other, ignore_global_phase=True):
+    def _approx_eq_(self, other: Any, atol) -> bool:
         if not isinstance(other, type(self)):
             return NotImplemented
-        cmp = (linalg.allclose_up_to_global_phase if ignore_global_phase
-               else np.allclose)
-        return cmp(self._matrix, other._matrix)
+        return np.allclose(self._matrix, other._matrix, rtol=0, atol=atol)
 
     def _unitary_(self) -> np.ndarray:
         return np.array(self._matrix)
 
-    def _circuit_diagram_info_(self, args: protocols.CircuitDiagramInfoArgs
-                               ) -> protocols.CircuitDiagramInfo:
+    def _circuit_diagram_info_(self, args: 'protocols.CircuitDiagramInfoArgs'
+                              ) -> 'protocols.CircuitDiagramInfo':
         return protocols.CircuitDiagramInfo(
             wire_symbols=(_matrix_to_diagram_symbol(self._matrix, args), '#2'))
 
@@ -175,14 +180,24 @@ class TwoQubitMatrixGate(raw_types.Gate):
 
     def __repr__(self):
         return 'cirq.TwoQubitMatrixGate({})'.format(
-                _numpy_array_repr(self._matrix))
+                proper_repr(self._matrix))
 
     def __str__(self):
         return str(self._matrix.round(3))
 
+    def _json_dict_(self):
+        return {
+            'cirq_type': self.__class__.__name__,
+            'matrix': self._matrix,
+        }
+
+    @classmethod
+    def _from_json_dict_(cls, matrix: List, **kwargs):
+        return cls(np.asarray(matrix))
+
 
 def _matrix_to_diagram_symbol(matrix: np.ndarray,
-                              args: protocols.CircuitDiagramInfoArgs) -> str:
+                              args: 'protocols.CircuitDiagramInfoArgs') -> str:
     if args.precision is not None:
         matrix = matrix.round(args.precision)
     result = str(matrix)
@@ -199,7 +214,3 @@ def _matrix_to_diagram_symbol(matrix: np.ndarray,
         lines.append('└' + ' ' * w + '┘')
         result = '\n'.join(lines)
     return result
-
-
-def _numpy_array_repr(arr: np.ndarray) -> str:
-    return 'np.array({!r})'.format(arr.tolist())

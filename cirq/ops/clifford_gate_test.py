@@ -202,6 +202,18 @@ def test_init_from_pauli(pauli, sqrt, expected):
 def test_pow():
     assert cirq.SingleQubitCliffordGate.X**-1 == cirq.SingleQubitCliffordGate.X
     assert cirq.SingleQubitCliffordGate.H**-1 == cirq.SingleQubitCliffordGate.H
+    assert (cirq.SingleQubitCliffordGate.X_sqrt ==
+            cirq.SingleQubitCliffordGate.X**0.5)
+    assert (cirq.SingleQubitCliffordGate.Y_sqrt ==
+            cirq.SingleQubitCliffordGate.Y**0.5)
+    assert (cirq.SingleQubitCliffordGate.Z_sqrt ==
+            cirq.SingleQubitCliffordGate.Z**0.5)
+    assert (cirq.SingleQubitCliffordGate.X_nsqrt ==
+            cirq.SingleQubitCliffordGate.X**-0.5)
+    assert (cirq.SingleQubitCliffordGate.Y_nsqrt ==
+            cirq.SingleQubitCliffordGate.Y**-0.5)
+    assert (cirq.SingleQubitCliffordGate.Z_nsqrt ==
+            cirq.SingleQubitCliffordGate.Z**-0.5)
     assert (cirq.SingleQubitCliffordGate.X_sqrt**-1 ==
             cirq.SingleQubitCliffordGate.X_nsqrt)
     assert cirq.inverse(cirq.SingleQubitCliffordGate.X_nsqrt) == (
@@ -347,12 +359,8 @@ def test_y_rotation(gate, trans_y):
     (cirq.SingleQubitCliffordGate.Z_nsqrt, cirq.Z ** -0.5)))
 def test_decompose(gate, gate_equiv):
     q0 = cirq.NamedQubit('q0')
-    mat = cirq.Circuit.from_ops(
-                    gate(q0),
-                ).to_unitary_matrix()
-    mat_check = cirq.Circuit.from_ops(
-                    gate_equiv(q0),
-                ).to_unitary_matrix()
+    mat = cirq.Circuit(gate(q0)).unitary()
+    mat_check = cirq.Circuit(gate_equiv(q0),).unitary()
     assert_allclose_up_to_global_phase(mat, mat_check, rtol=1e-7, atol=1e-7)
 
 
@@ -383,8 +391,8 @@ def test_inverse(gate):
 @pytest.mark.parametrize('gate', _all_clifford_gates())
 def test_inverse_matrix(gate):
     q0 = cirq.NamedQubit('q0')
-    mat = cirq.Circuit.from_ops(gate(q0)).to_unitary_matrix()
-    mat_inv = cirq.Circuit.from_ops(cirq.inverse(gate)(q0)).to_unitary_matrix()
+    mat = cirq.Circuit(gate(q0)).unitary()
+    mat_inv = cirq.Circuit(cirq.inverse(gate)(q0)).unitary()
     assert_allclose_up_to_global_phase(mat, mat_inv.T.conj(),
                                        rtol=1e-7, atol=1e-7)
 
@@ -394,14 +402,14 @@ def test_inverse_matrix(gate):
                       _all_clifford_gates()))
 def test_commutes_with_single_qubit_gate(gate, other):
     q0 = cirq.NamedQubit('q0')
-    mat = cirq.Circuit.from_ops(
-                    gate(q0),
-                    other(q0),
-                ).to_unitary_matrix()
-    mat_swap = cirq.Circuit.from_ops(
-                    other(q0),
-                    gate(q0),
-                ).to_unitary_matrix()
+    mat = cirq.Circuit(
+        gate(q0),
+        other(q0),
+    ).unitary()
+    mat_swap = cirq.Circuit(
+        other(q0),
+        gate(q0),
+    ).unitary()
     commutes = gate.commutes_with(other)
     commutes_check = cirq.allclose_up_to_global_phase(mat, mat_swap)
     assert commutes == commutes_check
@@ -414,14 +422,14 @@ def test_commutes_with_single_qubit_gate(gate, other):
 def test_commutes_with_pauli(gate, pauli, half_turns):
     pauli_gate = pauli ** half_turns
     q0 = cirq.NamedQubit('q0')
-    mat = cirq.Circuit.from_ops(
-                    gate(q0),
-                    pauli_gate(q0),
-                ).to_unitary_matrix()
-    mat_swap = cirq.Circuit.from_ops(
-                    pauli_gate(q0),
-                    gate(q0),
-                ).to_unitary_matrix()
+    mat = cirq.Circuit(
+        gate(q0),
+        pauli_gate(q0),
+    ).unitary()
+    mat_swap = cirq.Circuit(
+        pauli_gate(q0),
+        gate(q0),
+    ).unitary()
     commutes = gate.commutes_with(pauli)
     commutes_check = cirq.allclose_up_to_global_phase(mat, mat_swap)
     assert commutes == commutes_check
@@ -432,14 +440,14 @@ def test_commutes_with_pauli(gate, pauli, half_turns):
                       _all_clifford_gates()))
 def test_single_qubit_gate_after_switching_order(gate, other):
     q0 = cirq.NamedQubit('q0')
-    mat = cirq.Circuit.from_ops(
-                    gate(q0),
-                    other(q0),
-                ).to_unitary_matrix()
-    mat_swap = cirq.Circuit.from_ops(
-                    gate.equivalent_gate_before(other)(q0),
-                    gate(q0),
-                ).to_unitary_matrix()
+    mat = cirq.Circuit(
+        gate(q0),
+        other(q0),
+    ).unitary()
+    mat_swap = cirq.Circuit(
+        gate.equivalent_gate_before(other)(q0),
+        gate(q0),
+    ).unitary()
     assert_allclose_up_to_global_phase(mat, mat_swap, rtol=1e-7, atol=1e-7)
 
 

@@ -142,7 +142,7 @@ class _QubitGrouping:
             sizes[-2:] = reversed(sizes[-2:])
 
         # Make the actual groups.
-        self.groups = []  # type: List[List[ops.QubitId]]
+        self.groups = []  # type: List[List[ops.Qid]]
         i = 0
         for s in sizes:
             self.groups.append(self.qubits[i:i+s])
@@ -153,10 +153,10 @@ class _QubitGrouping:
                     for group_id, group in enumerate(self.groups)
                     for item_id, qubit in enumerate(group)}
 
-    def loc(self, q: ops.QubitId) -> Tuple[int, int]:
+    def loc(self, q: ops.Qid) -> Tuple[int, int]:
         return self.map[q]
 
-    def ind(self, q: ops.QubitId) -> int:
+    def ind(self, q: ops.Qid) -> int:
         g, a = self.loc(q)
         past = sum(len(h) for h in self.groups[:g])
         return self.qubit_count() - 1 - a - past
@@ -170,7 +170,7 @@ class _QubitGrouping:
     def flat_shape(self) -> Tuple[int]:
         return self.system_size(),
 
-    def all_in_same_group(self, *qubits: ops.QubitId) -> bool:
+    def all_in_same_group(self, *qubits: ops.Qid) -> bool:
         return len({self.loc(q)[0] for q in qubits}) <= 1
 
     def decompose_keep_func(self, op: ops.Operation) -> bool:
@@ -185,14 +185,9 @@ class _QubitGrouping:
 
         return False
 
-    def intercept_decompose_func(self,
-                                 op: Union[ops.Operation, circuits.Circuit]
-                                 ) -> ops.OP_TREE:
-        if not isinstance(op, ops.Operation):
-            return NotImplemented
-
+    def intercept_decompose_func(self, op: ops.Operation) -> ops.OP_TREE:
         # Drop measurements.
-        if ops.MeasurementGate.is_measurement(op):
+        if protocols.is_measurement(op):
             return []
 
         # Immediately completely decompose two qubit unitary operations.
@@ -342,7 +337,7 @@ class _TensorCircuit:
                  circuit: circuits.Circuit,
                  initial_state: Union[int, np.ndarray]):
         self.grouping = _QubitGrouping(circuit)
-        self.circuit = circuits.Circuit.from_ops(
+        self.circuit = circuits.Circuit(
             protocols.decompose(
                 circuit,
                 intercepting_decomposer=self.grouping.intercept_decompose_func,

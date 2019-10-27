@@ -20,7 +20,6 @@ from cirq.value import Duration
 
 
 if TYPE_CHECKING:
-    # pylint: disable=unused-import
     import cirq
 
 # Note: circuit/schedule types specified by name to avoid circular references.
@@ -53,7 +52,6 @@ class Device(metaclass=abc.ABCMeta):
         Raises:
             ValueError: The operation isn't valid for this device.
         """
-        pass
 
     @abc.abstractmethod
     def validate_scheduled_operation(
@@ -71,7 +69,6 @@ class Device(metaclass=abc.ABCMeta):
             ValueError: If the scheduled operation is not valid for the
                 schedule.
         """
-        pass
 
     def validate_circuit(self, circuit: 'cirq.Circuit') -> None:
         """Raises an exception if a circuit is not valid.
@@ -124,4 +121,3 @@ class Device(metaclass=abc.ABCMeta):
         Raises:
             ValueError: The schedule isn't valid for this device.
         """
-        pass

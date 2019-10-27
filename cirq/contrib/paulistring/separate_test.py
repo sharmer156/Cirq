@@ -14,9 +14,7 @@
 
 import cirq
 from cirq.contrib.paulistring import (
-    PauliStringPhasor,
-    convert_and_separate_circuit,
-)
+    convert_and_separate_circuit,)
 
 
 def test_toffoli_separate():
@@ -26,15 +24,15 @@ def test_toffoli_separate():
     c_left, c_right = convert_and_separate_circuit(circuit)
 
     cirq.testing.assert_allclose_up_to_global_phase(
-        circuit.to_unitary_matrix(),
-        (c_left + c_right).to_unitary_matrix(),
+        circuit.unitary(),
+        (c_left + c_right).unitary(),
         atol=1e-7,
     )
 
-    assert all(isinstance(op, PauliStringPhasor)
-               for op in c_left.all_operations())
-    assert all(isinstance(op, cirq.GateOperation) and
-               isinstance(op.gate, (cirq.SingleQubitCliffordGate,
-                                    cirq.CZPowGate))
-               for op in c_right.all_operations())
-
+    assert all(
+        isinstance(op, cirq.PauliStringPhasor)
+        for op in c_left.all_operations())
+    assert all(
+        isinstance(op, cirq.GateOperation) and
+        isinstance(op.gate, (cirq.SingleQubitCliffordGate, cirq.CZPowGate))
+        for op in c_right.all_operations())

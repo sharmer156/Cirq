@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
+from typing import Callable, List
 
 import pytest
+import sympy
 
 import cirq
-
-if TYPE_CHECKING:
-    # pylint: disable=unused-import
-    from typing import Callable, List
 
 
 def assert_optimizes(before: cirq.Circuit, expected: cirq.Circuit):
@@ -29,33 +26,27 @@ def assert_optimizes(before: cirq.Circuit, expected: cirq.Circuit):
     opt.optimize_circuit(actual)
 
     # Ignore differences that would be caught by follow-up optimizations.
-    followup_optimizations = [
+    followup_optimizations: List[Callable[[cirq.Circuit], None]] = [
         cirq.merge_single_qubit_gates_into_phased_x_z,
         cirq.EjectPhasedPaulis().optimize_circuit,
         cirq.EjectZ().optimize_circuit,
         cirq.DropNegligible().optimize_circuit,
         cirq.DropEmptyMoments().optimize_circuit
-    ]  # type: List[Callable[[cirq.Circuit], None]]
+    ]
     for post in followup_optimizations:
         post(actual)
         post(expected)
 
-    if actual != expected:
-        # coverage: ignore
-        print('ACTUAL')
-        print(actual)
-        print('EXPECTED')
-        print(expected)
-    assert actual == expected
-
+    assert actual == expected, 'ACTUAL {} : EXPECTED {}'.format(actual,
+                                                                expected)
 
 def assert_optimization_not_broken(circuit):
     """Check that the unitary matrix for the input circuit is the same (up to
     global phase and rounding error) as the unitary matrix of the optimized
     circuit."""
-    u_before = circuit.to_unitary_matrix()
+    u_before = circuit.unitary()
     cirq.MergeInteractions().optimize_circuit(circuit)
-    u_after = circuit.to_unitary_matrix()
+    u_after = circuit.unitary()
 
     cirq.testing.assert_allclose_up_to_global_phase(
         u_before, u_after, atol=1e-8)
@@ -76,12 +67,12 @@ def test_ignores_czs_separated_by_parameterized():
     assert_optimizes(
         before=cirq.Circuit([
             cirq.Moment([cirq.CZ(a, b)]),
-            cirq.Moment([cirq.Z(a)**cirq.Symbol('boo')]),
+            cirq.Moment([cirq.Z(a)**sympy.Symbol('boo')]),
             cirq.Moment([cirq.CZ(a, b)]),
         ]),
         expected=cirq.Circuit([
             cirq.Moment([cirq.CZ(a, b)]),
-            cirq.Moment([cirq.Z(a)**cirq.Symbol('boo')]),
+            cirq.Moment([cirq.Z(a)**sympy.Symbol('boo')]),
             cirq.Moment([cirq.CZ(a, b)]),
         ]))
 
@@ -106,7 +97,7 @@ def test_ignores_czs_separated_by_outer_cz():
 def test_cnots_separated_by_single_gates_correct():
     a, b = cirq.LineQubit.range(2)
     assert_optimization_not_broken(
-        cirq.Circuit.from_ops(
+        cirq.Circuit(
             cirq.CNOT(a, b),
             cirq.H(b),
             cirq.CNOT(a, b),
@@ -116,7 +107,7 @@ def test_cnots_separated_by_single_gates_correct():
 def test_czs_separated_by_single_gates_correct():
     a, b = cirq.LineQubit.range(2)
     assert_optimization_not_broken(
-        cirq.Circuit.from_ops(
+        cirq.Circuit(
             cirq.CZ(a, b),
             cirq.X(b),
             cirq.X(b),
@@ -130,7 +121,7 @@ def test_inefficient_circuit_correct():
     v = 0.11
     a, b = cirq.LineQubit.range(2)
     assert_optimization_not_broken(
-        cirq.Circuit.from_ops(
+        cirq.Circuit(
             cirq.H(b),
             cirq.CNOT(a, b),
             cirq.H(b),
@@ -138,30 +129,32 @@ def test_inefficient_circuit_correct():
             cirq.CNOT(b, a),
             cirq.H(a),
             cirq.CNOT(a, b),
-            cirq.Z(a)**t, cirq.Z(b)**-t,
+            cirq.Z(a)**t,
+            cirq.Z(b)**-t,
             cirq.CNOT(a, b),
-            cirq.H(a), cirq.Z(b)**v,
+            cirq.H(a),
+            cirq.Z(b)**v,
             cirq.CNOT(a, b),
-            cirq.Z(a)**-v, cirq.Z(b)**-v,
+            cirq.Z(a)**-v,
+            cirq.Z(b)**-v,
         ))
 
 
 def test_optimizes_single_iswap():
     a, b = cirq.LineQubit.range(2)
-    c = cirq.Circuit.from_ops(cirq.ISWAP(a, b))
+    c = cirq.Circuit(cirq.ISWAP(a, b))
     assert_optimization_not_broken(c)
     cirq.MergeInteractions().optimize_circuit(c)
     assert len([1 for op in c.all_operations() if len(op.qubits) == 2]) == 2
 
 
-@pytest.mark.parametrize('circuit', (
-    cirq.Circuit.from_ops(
-        cirq.CZPowGate(exponent=0.1)(*cirq.LineQubit.range(2)),
-    ),
-    cirq.Circuit.from_ops(
-        cirq.CZPowGate(exponent=0.2)(*cirq.LineQubit.range(2)),
-        cirq.CZPowGate(exponent=0.3)(*cirq.LineQubit.range(2)),
-    )))
+@pytest.mark.parametrize(
+    'circuit',
+    (cirq.Circuit(cirq.CZPowGate(exponent=0.1)(*cirq.LineQubit.range(2)),),
+     cirq.Circuit(
+         cirq.CZPowGate(exponent=0.2)(*cirq.LineQubit.range(2)),
+         cirq.CZPowGate(exponent=0.3)(*cirq.LineQubit.range(2)),
+     )))
 def test_decompose_partial_czs(circuit):
     optimizer = cirq.MergeInteractions(allow_partial_czs=False)
     optimizer.optimize_circuit(circuit)
@@ -176,9 +169,8 @@ def test_decompose_partial_czs(circuit):
 
 
 def test_not_decompose_partial_czs():
-    circuit = cirq.Circuit.from_ops(
-        cirq.CZPowGate(exponent=0.1)(*cirq.LineQubit.range(2)),
-    )
+    circuit = cirq.Circuit(
+        cirq.CZPowGate(exponent=0.1)(*cirq.LineQubit.range(2)),)
 
     optimizer = cirq.MergeInteractions(allow_partial_czs=True)
     optimizer.optimize_circuit(circuit)
@@ -193,11 +185,11 @@ def test_not_decompose_partial_czs():
 
 
 def test_post_clean_up():
-    class Marker(cirq.Gate):
+    class Marker(cirq.TwoQubitGate):
         pass
 
     a, b = cirq.LineQubit.range(2)
-    c_orig = cirq.Circuit.from_ops(
+    c_orig = cirq.Circuit(
         cirq.CZ(a, b),
         cirq.CZ(a, b),
         cirq.CZ(a, b),
@@ -218,7 +210,7 @@ def test_post_clean_up():
     assert isinstance(circuit[0].operations[0].gate, Marker)
     assert isinstance(circuit[-1].operations[0].gate, Marker)
 
-    u_before = c_orig.to_unitary_matrix()
-    u_after = circuit[1:-1].to_unitary_matrix()
+    u_before = c_orig.unitary()
+    u_after = circuit[1:-1].unitary()
     cirq.testing.assert_allclose_up_to_global_phase(
         u_before, u_after, atol=1e-8)

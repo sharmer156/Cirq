@@ -23,12 +23,9 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import collections
-
 from cirq.ops import raw_types
 
 if TYPE_CHECKING:
-    # pylint: disable=unused-import
     from cirq.ops import qubit_order_or_list
 
 
@@ -39,8 +36,8 @@ TExternalQubit = TypeVar('TExternalQubit')
 class QubitOrder:
     """Defines the kronecker product order of qubits."""
 
-    def __init__(self, explicit_func: Callable[[Iterable[raw_types.QubitId]],
-                                               Tuple[raw_types.QubitId, ...]]
+    def __init__(self, explicit_func: Callable[[Iterable[raw_types.Qid]],
+                                               Tuple[raw_types.Qid, ...]]
                  ) -> None:
         self._explicit_func = explicit_func
 
@@ -53,7 +50,7 @@ class QubitOrder:
     """
 
     @staticmethod
-    def explicit(fixed_qubits: Iterable[raw_types.QubitId],
+    def explicit(fixed_qubits: Iterable[raw_types.Qid],
                  fallback: Optional['QubitOrder']=None) -> 'QubitOrder':
         """A basis that contains exactly the given qubits in the given order.
 
@@ -74,7 +71,7 @@ class QubitOrder:
                 'Qubits appear in fixed_order twice: {}.'.format(result))
 
         def func(qubits):
-            remaining = set(qubits) - set(fixed_qubits)
+            remaining = set(qubits) - set(result)
             if not remaining:
                 return result
             if not fallback:
@@ -85,7 +82,7 @@ class QubitOrder:
         return QubitOrder(func)
 
     @staticmethod
-    def sorted_by(key: Callable[[raw_types.QubitId], Any]) -> 'QubitOrder':
+    def sorted_by(key: Callable[[raw_types.Qid], Any]) -> 'QubitOrder':
         """A basis that orders qubits ascending based on a key function.
 
         Args:
@@ -98,8 +95,8 @@ class QubitOrder:
         """
         return QubitOrder(lambda qubits: tuple(sorted(qubits, key=key)))
 
-    def order_for(self, qubits: Iterable[raw_types.QubitId]
-                  ) -> Tuple[raw_types.QubitId, ...]:
+    def order_for(self, qubits: Iterable[raw_types.Qid]
+                  ) -> Tuple[raw_types.Qid, ...]:
         """Returns a qubit tuple ordered corresponding to the basis.
 
         Args:
@@ -124,7 +121,7 @@ class QubitOrder:
         Returns:
             The basis implied by the value.
         """
-        if isinstance(val, collections.Iterable):
+        if isinstance(val, Iterable):
             return QubitOrder.explicit(val)
         if isinstance(val, QubitOrder):
             return val

@@ -1,7 +1,7 @@
 ## Gates
 
-A ``Gate`` is an operation that can be applied to a collection of 
-qubits (objects with a ``QubitId``).  ``Gates`` can be applied
+A ``Gate`` is an operation that can be applied to a collection of
+qubits (objects with a ``Qid``).  ``Gates`` can be applied
 to qubits by calling their ``on`` method, or, alternatively
 calling the gate on the qubits.  The object created by such calls
 is an ``Operation``.
@@ -16,6 +16,19 @@ print(CNOT(q0, q1))
 # CNOT((0, 0), (0, 1))
 ```
 
+``Gate``s operate on a specific number of qubits and classes that
+implement ``Gate`` must supply either the ``_num_qubits_`` or ``_qid_shape_`` magic method.  For
+convenience one can use the ``SingleQubitGate``, ``TwoQubitGate``,
+and ``ThreeQubitGate`` classes for these common gate sizes.
+
+The most common type of ``Gate`` is one that corresponds to applying
+a unitary evolution on the qubits that the gate acts on.
+``Gate``s can also correspond to noisy evolution on the qubits. This
+version of a gate is not used when sending the circuit to a
+quantum computer for execution, but it can be used with
+various simulators. See [noise documentation](noise.md).
+
+
 ### Magic Methods
 
 A class that implements ``Gate`` can be applied to qubits to produce an ``Operation``.
@@ -28,7 +41,20 @@ Or, if a gate specifies a `__pow__` method that works for an exponent of -1, the
 
 We describe some magic methods below.
 
-#### `cirq.unitary` and `def _unitary_` 
+#### `cirq.num_qubits` and `def _num_qubits_`
+
+A `Gate` must implement the `_num_qubits_` (or `_qid_shape_`) method.
+This method returns an integer and is used by `cirq.num_qubits` to determine how many qubits this gate operates on.
+
+#### `cirq.qid_shape` and `def _qid_shape_`
+
+A qudit gate or operation must implement the `_qid_shape_` method that returns a tuple of integers.
+This method is used to determine how many qudits the gate or operation operates on and what dimension each qudit must be.
+If only the `_num_qubits_` method is implemented, the object is assumed to operate only on qubits.
+Callers can query the qid shape of the object by calling `cirq.qid_shape` on it.
+See [qudit documentation](qudits.md) for more information.
+
+#### `cirq.unitary` and `def _unitary_`
 
 When an object can be described by a unitary matrix, it can expose that unitary
 matrix by implementing a `_unitary_(self) -> np.ndarray` method.

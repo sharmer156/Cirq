@@ -12,24 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, cast, Optional, Tuple
+from typing import cast, Optional, Tuple
 
 from cirq import ops, protocols
 
 
 def escape_text_for_latex(text):
     escaped = (text
-               .replace('\\', '\\textbackslash{}')
-               .replace('^', '\\textasciicircum{}')
-               .replace('~', '\\textasciitilde{}')
-               .replace('_', '\\_')
-               .replace('{', '\\{')
-               .replace('}', '\\}')
-               .replace('$', '\\$')
-               .replace('%', '\\%')
-               .replace('&', '\\&')
-               .replace('#', '\\#'))
-    return '\\text{' + escaped + '}'
+               .replace('\\', r'\textbackslash{}')
+               .replace('{', r'\{')
+               .replace('}', r'\}')
+               .replace('^', r'\textasciicircum{}')
+               .replace('~', r'\textasciitilde{}')
+               .replace('_', r'\_')
+               .replace('$', r'\$')
+               .replace('%', r'\%')
+               .replace('&', r'\&')
+               .replace('#', r'\#'))
+    return r'\text{' + escaped + '}'
 
 
 def get_multigate_parameters(
@@ -54,7 +54,7 @@ def hardcoded_qcircuit_diagram_info(
         (r'\targ',) if op.gate == ops.X else
         (r'\control', r'\control') if op.gate == ops.CZ else
         (r'\control', r'\targ') if op.gate == ops.CNOT else
-        (r'\meter',) if ops.MeasurementGate.is_measurement(op.gate) else
+        (r'\meter',) if isinstance(op.gate, ops.MeasurementGate) else
         ())
     return (protocols.CircuitDiagramInfo(cast(Tuple[str, ...], symbols))
             if symbols else None)
@@ -65,7 +65,7 @@ def convert_text_diagram_info_to_qcircuit_diagram_info(
     labels = [escape_text_for_latex(e) for e in info.wire_symbols]
     if info.exponent != 1:
         labels[0] += '^{' + str(info.exponent) + '}'
-    symbols = tuple('\\gate{' + l + '}' for l in labels)
+    symbols = tuple(r'\gate{' + l + '}' for l in labels)
     return protocols.CircuitDiagramInfo(symbols)
 
 
@@ -90,8 +90,8 @@ def multigate_qcircuit_diagram_info(
             str(op))
     if (info is not None) and (info.exponent != 1):
         name += '^{' + str(info.exponent) + '}'
-    box = '\multigate{' + str(n_qubits - 1) + '}{' + name + '}'
-    ghost = '\ghost{' + name + '}'
+    box = r'\multigate{' + str(n_qubits - 1) + '}{' + name + '}'
+    ghost = r'\ghost{' + name + '}'
     assert args.qubit_map is not None
     assert args.known_qubits is not None
     symbols = tuple(box if (args.qubit_map[q] == min_index) else
@@ -108,7 +108,7 @@ def fallback_qcircuit_diagram_info(
     args = args.with_args(use_unicode_characters=False)
     info = protocols.circuit_diagram_info(op, args, default=None)
     if info is None:
-        name = str(op.gate if isinstance(op, ops.GateOperation) else op)
+        name = str(op.gate or op)
         n_qubits = len(op.qubits)
         symbols = tuple('#{}'.format(i + 1) if i else name
                 for i in range( n_qubits))

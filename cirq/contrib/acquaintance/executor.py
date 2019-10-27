@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, TYPE_CHECKING, Sequence
+from typing import DefaultDict, Dict, Sequence, TYPE_CHECKING
 
 import abc
 from collections import defaultdict
 
-from cirq import circuits, devices, ops
+from cirq import circuits, devices, ops, protocols
 
 from cirq.contrib.acquaintance.gates import (
-        AcquaintanceOpportunityGate, ACQUAINT)
+        AcquaintanceOpportunityGate)
 from cirq.contrib.acquaintance.devices import (
         is_acquaintance_strategy)
 from cirq.contrib.acquaintance.permutation import (
@@ -30,10 +30,8 @@ from cirq.contrib.acquaintance.permutation import (
 from cirq.contrib.acquaintance.mutation_utils import (
         expose_acquaintance_gates)
 
-
 if TYPE_CHECKING:
-    # pylint: disable=unused-import
-    from typing import Callable, List, DefaultDict
+    import cirq
 
 
 class ExecutionStrategy(metaclass=abc.ABCMeta):
@@ -45,23 +43,23 @@ class ExecutionStrategy(metaclass=abc.ABCMeta):
 
     keep_acquaintance = False
 
-    @abc.abstractproperty
-    def device(self) -> devices.Device:
+    @property
+    @abc.abstractmethod
+    def device(self) -> 'cirq.Device':
         """The device for which the executed acquaintance strategy should be
         valid.
         """
 
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def initial_mapping(self) -> LogicalMapping:
         """The initial mapping of logical indices to qubits."""
 
 
     @abc.abstractmethod
-    def get_operations(self,
-                       indices: Sequence[LogicalIndex],
-                       qubits: Sequence[ops.QubitId]
-                       ) -> ops.OP_TREE:
+    def get_operations(self, indices: Sequence[LogicalIndex],
+                       qubits: Sequence['cirq.Qid']) -> 'cirq.OP_TREE':
         """Gets the logical operations to apply to qubits."""
 
     def __call__(self, *args, **kwargs):
@@ -77,7 +75,7 @@ class StrategyExecutor(circuits.PointOptimizer):
         self.mapping = execution_strategy.initial_mapping.copy()
 
 
-    def __call__(self, strategy: circuits.Circuit):
+    def __call__(self, strategy: 'cirq.Circuit'):
         if not is_acquaintance_strategy(strategy):
             raise TypeError('not is_acquaintance_strategy(strategy)')
         expose_acquaintance_gates(strategy)
@@ -86,12 +84,9 @@ class StrategyExecutor(circuits.PointOptimizer):
         return self.mapping.copy()
 
 
-    def optimization_at(self,
-                        circuit: circuits.Circuit,
-                        index: int,
-                        op: ops.Operation):
-        if (isinstance(op, ops.GateOperation) and
-                isinstance(op.gate, AcquaintanceOpportunityGate)):
+    def optimization_at(self, circuit: 'cirq.Circuit', index: int,
+                        op: 'cirq.Operation'):
+        if isinstance(op.gate, AcquaintanceOpportunityGate):
             logical_indices = tuple(self.mapping[q] for q in op.qubits)
             logical_operations = self.execution_strategy.get_operations(
                     logical_indices, op.qubits)
@@ -116,13 +111,19 @@ class AcquaintanceOperation(ops.GateOperation):
     """Represents an a acquaintance opportunity between a particular set of
     logical indices on a particular set of physical qubits.
     """
-    def __init__(self,
-                 qubits: Sequence[ops.raw_types.QubitId],
+
+    def __init__(self, qubits: Sequence['cirq.Qid'],
                  logical_indices: Sequence[LogicalIndex]) -> None:
         if len(logical_indices) != len(qubits):
             raise ValueError('len(logical_indices) != len(qubits)')
-        super().__init__(ACQUAINT, qubits)
-        self.logical_indices = logical_indices # type: LogicalIndexSequence
+        super().__init__(AcquaintanceOpportunityGate(num_qubits=len(qubits)),
+                         qubits)
+        self.logical_indices: LogicalIndexSequence = logical_indices
+
+    def _circuit_diagram_info_(self, args: 'cirq.CircuitDiagramInfoArgs'
+                              ) -> 'cirq.CircuitDiagramInfo':
+        wire_symbols = tuple('({})'.format(i) for i in self.logical_indices)
+        return protocols.CircuitDiagramInfo(wire_symbols=wire_symbols)
 
 
 class GreedyExecutionStrategy(ExecutionStrategy):
@@ -134,8 +135,7 @@ class GreedyExecutionStrategy(ExecutionStrategy):
     def __init__(self,
                  gates: LogicalGates,
                  initial_mapping: LogicalMapping,
-                 device: devices.Device = None
-                 ) -> None:
+                 device: 'cirq.Device' = None) -> None:
         """
         Args:
             gates: The gates to insert.
@@ -148,7 +148,7 @@ class GreedyExecutionStrategy(ExecutionStrategy):
                     'are of the same arity.')
         self.index_set_to_gates = self.canonicalize_gates(gates)
         self._initial_mapping = initial_mapping.copy()
-        self._device = devices.UnconstrainedDevice if device is None else device
+        self._device = device or devices.UNCONSTRAINED_DEVICE
 
 
 
@@ -158,14 +158,12 @@ class GreedyExecutionStrategy(ExecutionStrategy):
 
 
     @property
-    def device(self) -> devices.Device:
+    def device(self) -> 'cirq.Device':
         return self._device
 
 
-    def get_operations(self,
-                       indices: Sequence[LogicalIndex],
-                       qubits: Sequence[ops.QubitId]
-                       ) -> ops.OP_TREE:
+    def get_operations(self, indices: Sequence[LogicalIndex],
+                       qubits: Sequence['cirq.Qid']) -> 'cirq.OP_TREE':
         index_set = frozenset(indices)
         if index_set in self.index_set_to_gates:
             gates = self.index_set_to_gates.pop(index_set)
@@ -182,8 +180,8 @@ class GreedyExecutionStrategy(ExecutionStrategy):
         Takes a set of gates specified by ordered sequences of logical
         indices, and groups those that act on the same qubits regardless of
         order."""
-        canonicalized_gates = defaultdict(dict
-            ) # type: DefaultDict[frozenset, LogicalGates]
+        canonicalized_gates: DefaultDict[frozenset, LogicalGates] = defaultdict(
+            dict)
         for indices, gate in gates.items():
             indices = tuple(indices)
             canonicalized_gates[frozenset(indices)][indices] = gate

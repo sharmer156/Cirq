@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union, cast
+from typing import Union, TYPE_CHECKING
 
 import abc
 
@@ -21,8 +21,13 @@ from cirq.contrib.acquaintance.gates import (
     AcquaintanceOpportunityGate, SwapNetworkGate)
 from cirq.contrib.acquaintance.bipartite import (
     BipartiteSwapNetworkGate)
+from cirq.contrib.acquaintance.shift_swap_network import (
+    ShiftSwapNetworkGate)
 from cirq.contrib.acquaintance.permutation import (
     PermutationGate)
+
+if TYPE_CHECKING:
+    import cirq
 
 
 class AcquaintanceDevice(devices.Device, metaclass=abc.ABCMeta):
@@ -34,12 +39,13 @@ class AcquaintanceDevice(devices.Device, metaclass=abc.ABCMeta):
     """
     gate_types = (AcquaintanceOpportunityGate, PermutationGate)
 
-    def validate_operation(self, operation: ops.Operation) -> None:
+    def validate_operation(self, operation: 'cirq.Operation') -> None:
         if not (isinstance(operation, ops.GateOperation) and
                 isinstance(operation.gate, self.gate_types)):
-            gate_op = cast(ops.GateOperation, operation)
-            raise ValueError('not isinstance(' + str(gate_op.gate) +
-                             ', gate_types)')
+            raise ValueError(
+                    'not (isinstance({0!r}, {1!r}) and '
+                          'ininstance({0!r}.gate, {2!r})'.format(
+                        operation, ops.Operation, self.gate_types))
 
     def duration_of(self, operation):
         raise NotImplementedError()
@@ -55,7 +61,8 @@ class AcquaintanceDevice(devices.Device, metaclass=abc.ABCMeta):
     def validate_schedule(self, schedule: schedules.Schedule) -> None:
         raise NotImplementedError()
 
-def is_acquaintance_strategy(circuit: circuits.Circuit):
+
+def is_acquaintance_strategy(circuit: 'cirq.Circuit'):
     return isinstance(circuit._device, AcquaintanceDevice)
 
 def get_acquaintance_size(obj: Union[circuits.Circuit, ops.Operation]) -> int:
@@ -73,12 +80,15 @@ def get_acquaintance_size(obj: Union[circuits.Circuit, ops.Operation]) -> int:
         return len(obj.qubits)
     if isinstance(obj.gate, BipartiteSwapNetworkGate):
         return 2
+    if isinstance(obj.gate, ShiftSwapNetworkGate):
+        return obj.gate.acquaintance_size()
     if isinstance(obj.gate, SwapNetworkGate):
         if obj.gate.acquaintance_size is None:
             return sum(sorted(obj.gate.part_lens)[-2:])
         if (obj.gate.acquaintance_size - 1) in obj.gate.part_lens:
             return obj.gate.acquaintance_size
-    return 0
+    sizer = getattr(obj.gate, '_acquaintance_size_', None)
+    return 0 if sizer is None else sizer(len(obj.qubits))
 
 class _UnconstrainedAcquaintanceDevice(AcquaintanceDevice):
     "An acquaintance device with no constraints other than of the gate types."

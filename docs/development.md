@@ -13,12 +13,10 @@ git clone git@github.com:quantumlib/cirq.git
 cd cirq
 ```
 
-To do your development in a Docker virtual machine, you can use dev_tools/Dockerfile:
+To do your development in a Docker image, you can build one with Cirq/dev_tools/Dockerfile or pull an existing image:
 ```bash
-    git clone https://github.com/quantumlib/Cirq
-    cd Cirq/dev_tools
-    docker build -t cirq/dev . # This builds the actual image based on latest Ubuntu, cloning the Cirq tree into it with the needed dependencies.
-    docker run -it cirq/dev python3 -c "import cirq; print(cirq.google.Foxtail)"
+    docker pull quantumlib/cirq:dev
+    docker run -it quantumlib/cirq:dev python -c "import cirq; print(cirq.google.Foxtail)"
 ```
 
 
@@ -79,9 +77,7 @@ See the previous section for instructions.
     cat apt-system-requirements.txt dev_tools/conf/apt-list-dev-tools.txt | xargs sudo apt-get install --yes
     ```
 
-    If you change protocol buffers you will need to regenerate the proto files, so you should
-    install the protocol buffer compiler. Instructions for this can be found
-    [here](https://github.com/protocolbuffers/protobuf/blob/master/src/README.md).
+    There are some extra steps if protocol buffers are changed; see the next section.
 
 2. Prepare a virtual environment including the dev tools (such as mypy).
 
@@ -90,10 +86,8 @@ See the previous section for instructions.
 
     ```bash
     mkvirtualenv cirq-py3 --python=/usr/bin/python3
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    pip install -r dev_tools/conf/pip-list-dev-tools.txt
-    pip install -r cirq/contrib/contrib-requirements.txt
+    python -m pip install --upgrade pip
+    python -m pip install -e .[dev_env]
     ```
 
     (When you later open another terminal, you can activate the virtualenv with `workon cirq-py3`.)
@@ -116,8 +110,19 @@ See the previous section for instructions.
     add2virtualenv ./
     ```
 
+### Protocol buffers
 
-### Running continuous integration checks locally
+[Protocol buffers](https://developers.google.com/protocol-buffers) are used in Cirq for converting circuits, gates, and other objects into a standard form that can be written and read by other programs.
+Cirq's protobufs live at [cirq/api/google](https://github.com/quantumlib/Cirq/tree/master/cirq/api/google) and may need to be changed or extended from time to time.
+
+If any protos are updated, their dependents can be rebuilt by calling the script [dev_tools/build-protos.sh](https://github.com/quantumlib/Cirq/tree/master/dev_tools).
+This script uses grpcio-tools and protobuf version 3.8.0 to generate the python proto api.
+
+Additionally, for workflows that use bazel (relevant for C/C++ code depending on Cirq), we have made available bazel rulesets for generating both python and C/C++ proto apis.
+These rules live in the BUILD files [here](https://github.com/quantumlib/Cirq/tree/master/cirq/api/google/v1) and [here](https://github.com/quantumlib/Cirq/tree/master/cirq/api/google/v2).
+Downstream projects should load Cirq as an [external dependency](https://docs.bazel.build/versions/master/external.html), allowing rules from those BUILD files to be used directly.
+
+### Continuous integration and local testing
 
 There are a few options for running continuous integration checks, varying from easy and fast to slow and reliable.
 
@@ -130,7 +135,7 @@ mypy --config-file=dev_tools/conf/mypy.ini .
 ```
 
 This can be a bit tedious, because you have to specify the configuration files each time.
-A more convenient way to run checks is to via the scripts in the [check/](/check) directory, which specify configuration arguments for you and cover more use cases:
+A more convenient way to run checks is to via the scripts in the [check/](https://github.com/quantumlib/Cirq/tree/master/check) directory, which specify configuration arguments for you and cover more use cases:
 
 ```bash
 # Run all tests in the repository.
@@ -142,44 +147,25 @@ A more convenient way to run checks is to via the scripts in the [check/](/check
 # Typecheck all python files in the repository.
 ./check/mypy [files-and-flags-for-mypy]
 
-# Transpile to python 2 and run tests.
-./check/pytest2  # Note: you must be in a python 2 virtual env to run this.
-
 # Compute incremental coverage vs master (or a custom revision of your choice).
 ./check/pytest-and-incremental-coverage [BASE_REVISION]
 
 # Only run tests associated with files that have changed when diffed vs master (or a custom revision of your choice).
 ./check/pytest-changed-files [BASE_REVISION]
+
+# Run the documentation tests.
+./check/doctest
+
+# Check the format of the filess.  Use --apply to apply the suggested format changes.
+./check/format-incremental [--apply]
+
+# Run all of the above tests. Which pytest is run is set by the --only-changed-files.
+./check/all [BASE_REVISION] [--only-changed-files] [--apply-format-changes]
 ```
 
-The above scripts are convenient and reasonably fast, but they often won't exactly match the results computed by the continuous integration builds run on travis.
-For example, you may be running an older version of `pylint` or `numpy`.
-In order to run a check that is significantly more likely to agree with the travis builds, you can use the [continuous-integration/check.sh](/continuous-integration/check.sh) script:
-
-```bash
-./continuous-integration/check.sh
-```
-
-This script will create (temporary) virtual environments, do a fresh install of all relevant dependencies, transpile the python 2 code, and run all relevant checks within those clean environments.
-Note that creating the virtual environments takes time, and prevents some caching mechanisms from working, so `continuous-integration/check.sh` is significantly slower than the simpler check scripts.
-When using this script, you can run a subset of the checks using the ```--only``` flag.
-This flag value can be `pylint`, `typecheck`, `pytest`, `pytest2`, or `incremental-coverage`.
-
-
-### Producing the Python 2.7 code
-
-Run [dev_tools/python2.7-generate.sh](/dev_tools/python2.7-generate.sh) to transpile cirq's python 3 code into python 2.7 code:
-
-```bash
-./dev_tools/python2.7-generate.sh [output_dir] [input_dir] [virtual_env_with_3to2]
-```
-
-If you don't specify any arguments then the input directory will be the current
-working directory, the output directory will be `python2.7-output` within the
-current directory, and `3to2` will be invoked in the current environment.
-
-The script fails with no effects if the output directory already exists.
-
+The above scripts are convenient and reasonably fast, but they often won't exactly match the results computed by the continuous integration builds run on T ravis.
+For example, you may be running an older version of `pylint` or `numpy`. If you need to test against the actual continuous integration check, open up a pull request.
+For this pull request you may want to mark it as `[Testing]` so that it is not reviewed.
 
 ### Writing docstrings and generating documentation
 
@@ -256,9 +242,7 @@ The HTML output will go into the `docs/_build` directory.
     ./dev_tools/packaging/verify-published-package.sh FULL_VERSION_REPORTED_BY_PUBLISH_SCRIPT --test
    ```
 
-    The script will create fresh virtual environments, install cirq and its dependencies, check that code importing cirq executes, and run the tests over the installed code.
-    It will do this for both python 2 and python 3.
-    If everything goes smoothly, the script will finish by printing `VERIFIED`.
+    The script will create fresh virtual environments, install cirq and its dependencies, check that code importing cirq executes, and run the tests over the installed code. If everything goes smoothly, the script will finish by printing `VERIFIED`.
 
 2. Do a dry run with prod pypi
 
@@ -278,13 +262,13 @@ The HTML output will go into the `docs/_build` directory.
 
     If everything goes smoothly, the script will finish by printing `VERIFIED`.
 
-3. Set the version number in [cirq/_version.py](/cirq/_version.py).
+3. Set the version number in [cirq/_version.py](https://github.com/quantumlib/Cirq/blob/master/cirq/_version.py).
 
     Development versions end with `.dev` or `.dev#`.
     For example, `0.0.4.dev500` is a development version of the release version `0.0.4`.
     For a release, create a pull request turning `#.#.#.dev*` into `#.#.#` and a follow up pull request turning `#.#.#` into `(#+1).#.#.dev`.
 
-4. Run [dev_tools/packaging/produce-package.sh](/dev_tools/packaging/produce-package.sh) to produce pypi artifacts.
+4. Run [dev_tools/packaging/produce-package.sh](https://github.com/quantumlib/Cirq/blob/master/dev_tools/packaging/produce-package.sh) to produce pypi artifacts.
 
     ```bash
     dev_tools/packaging/produce-package.sh dist
@@ -316,7 +300,7 @@ The HTML output will go into the `docs/_build` directory.
     And try it out for yourself:
 
     ```bash
-    pip install cirq
+    python -m pip install cirq
     python -c "import cirq; print(cirq.google.Foxtail)"
     python -c "import cirq; print(cirq.__version__)"
     ```

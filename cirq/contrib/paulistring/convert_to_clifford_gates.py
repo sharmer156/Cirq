@@ -16,7 +16,7 @@ from typing import Optional
 
 import numpy as np
 
-from cirq import ops, linalg, protocols, optimizers
+from cirq import ops, protocols, optimizers, linalg
 from cirq.circuits.circuit import Circuit
 from cirq.circuits.optimization_pass import (
     PointOptimizationSummary,
@@ -38,39 +38,38 @@ class ConvertToSingleQubitCliffordGates(PointOptimizer):
 
     def __init__(self,
                  ignore_failures: bool = False,
-                 tolerance: float = 0) -> None:
+                 atol: float = 0) -> None:
         """
         Args:
             ignore_failures: If set, gates that fail to convert are forwarded
                 unchanged. If not set, conversion failures raise a TypeError.
-            tolerance: Maximum absolute error tolerance. The optimization is
+            atol: Maximum absolute error tolerance. The optimization is
                 permitted to round angles with a threshold determined by this
                 tolerance.
         """
         super().__init__()
         self.ignore_failures = ignore_failures
-        self.tolerance = tolerance
-        self._tol = linalg.Tolerance(atol=tolerance)
+        self.atol = atol
 
     def _rotation_to_clifford_gate(self, pauli: ops.Pauli, half_turns: float
                                    ) -> ops.SingleQubitCliffordGate:
         quarter_turns = round(half_turns * 2) % 4
         if quarter_turns == 1:
             return ops.SingleQubitCliffordGate.from_pauli(pauli, True)
-        elif quarter_turns == 2:
+        if quarter_turns == 2:
             return ops.SingleQubitCliffordGate.from_pauli(pauli)
-        elif quarter_turns == 3:
+        if quarter_turns == 3:
             return ops.SingleQubitCliffordGate.from_pauli(pauli, True)**-1
-        else:
-            return ops.SingleQubitCliffordGate.I
 
-    def _matrix_to_clifford_op(self, mat: np.ndarray, qubit: ops.QubitId
+        return ops.SingleQubitCliffordGate.I
+
+    def _matrix_to_clifford_op(self, mat: np.ndarray, qubit: ops.Qid
                                ) -> Optional[ops.Operation]:
         rotations = optimizers.single_qubit_matrix_to_pauli_rotations(
-            mat, self.tolerance)
+            mat, self.atol)
         clifford_gate = ops.SingleQubitCliffordGate.I
         for pauli, half_turns in rotations:
-            if self._tol.all_near_zero_mod(half_turns, 0.5):
+            if linalg.all_near_zero_mod(half_turns, 0.5):
                 clifford_gate = clifford_gate.merged_with(
                     self._rotation_to_clifford_gate(pauli, half_turns))
             else:
@@ -79,8 +78,7 @@ class ConvertToSingleQubitCliffordGates(PointOptimizer):
 
     def _keep(self, op: ops.Operation) -> bool:
         # Don't change if it's already a SingleQubitCliffordGate
-        return (isinstance(op, ops.GateOperation) and
-                isinstance(op.gate, ops.SingleQubitCliffordGate))
+        return isinstance(op.gate, ops.SingleQubitCliffordGate)
 
     def _convert_one(self, op: ops.Operation) -> ops.OP_TREE:
         # Single qubit gate with known matrix?

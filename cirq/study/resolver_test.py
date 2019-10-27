@@ -14,45 +14,84 @@
 
 """Tests for parameter resolvers."""
 
-import itertools
+import numpy as np
+import sympy
 
 import cirq
 
 
 def test_value_of():
-    r = cirq.ParamResolver({'a': 0.5, 'b': 0.1})
-    assert r.value_of(cirq.Symbol('a')) == 0.5
+    assert not bool(cirq.ParamResolver())
+
+    r = cirq.ParamResolver({'a': 0.5, 'b': 0.1, 'c': 1 + 1j})
+    assert bool(r)
+
+    assert r.value_of('x') == sympy.Symbol('x')
+    assert r.value_of('a') == 0.5
+    assert r.value_of(sympy.Symbol('a')) == 0.5
     assert r.value_of(0.5) == 0.5
-    assert r.value_of(cirq.Symbol('b')) == 0.1
+    assert r.value_of(sympy.Symbol('b')) == 0.1
     assert r.value_of(0.3) == 0.3
+    assert r.value_of(sympy.Symbol('a') * 3) == 1.5
+    assert r.value_of(sympy.Symbol('b') / 0.1 - sympy.Symbol('a')) == 0.5
+
+    assert r.value_of(sympy.pi) == np.pi
+    assert r.value_of(2 * sympy.pi) == 2 * np.pi
+    assert r.value_of('c') == 1 + 1j
+    assert r.value_of(sympy.I * sympy.pi) == np.pi * 1j
 
 
 def test_param_dict():
     r = cirq.ParamResolver({'a': 0.5, 'b': 0.1})
+    r2 = cirq.ParamResolver(r)
+    assert r2 is r
     assert r.param_dict == {'a': 0.5, 'b': 0.1}
 
 
-def test_hash():
-    a = cirq.ParamResolver({})
-    b = cirq.ParamResolver({'a': 0.0})
-    c = cirq.ParamResolver({'a': 0.1})
-    d = cirq.ParamResolver({'a': 0.0, 'b': 0.1})
-    e = cirq.ParamResolver({'a': 0.3, 'b': 0.1})
-    f = cirq.ParamResolver({'b': 0.1})
-    g = cirq.ParamResolver({'c': 0.1})
-    resolvers = [a, b, c, d, e, f, g]
-    for r in resolvers:
-        assert isinstance(hash(r), int)
-    for r1, r2 in itertools.combinations(resolvers, 2):
-        assert hash(r1) != hash(r2)
+def test_param_dict_iter():
+    r = cirq.ParamResolver({'a': 0.5, 'b': 0.1})
+    assert [key for key in r] == ['a', 'b']
+    assert [r.value_of(key) for key in r] == [0.5, 0.1]
+    assert list(r) == ['a', 'b']
+
+
+def test_formulas_in_param_dict():
+    """
+    Param dicts are allowed to have str or sympy.Symbol as keys and
+    floats or sympy.Symbol as values.  This should not be a common use case,
+    but this tests makes sure something reasonable is returned when
+    mixing these types and using formulas in ParamResolvers.
+
+    Note that sympy orders expressions for deterministic resolution, so
+    depending on the operands sent to sub(), the expression may not fully
+    resolve if it needs to take several iterations of resolution.
+    """
+    a = sympy.Symbol('a')
+    b = sympy.Symbol('b')
+    c = sympy.Symbol('c')
+    e = sympy.Symbol('e')
+    r = cirq.ParamResolver({a: b + 1, b: 2, b + c: 101, 'd': 2 * e})
+    assert r.value_of('a') == 3
+    assert r.value_of('b') == 2
+    assert r.value_of(b + c) == 101
+    assert r.value_of('c') == c
+    assert r.value_of('d') == 2 * e
 
 
 def test_equals():
     et = cirq.testing.EqualsTester()
-    et.add_equality_group(cirq.ParamResolver({}))
-    et.add_equality_group(cirq.ParamResolver({'a': 0.0}))
+    et.add_equality_group(cirq.ParamResolver(),
+                          cirq.ParamResolver(None),
+                          cirq.ParamResolver({}),
+                          cirq.ParamResolver(cirq.ParamResolver({})))
+    et.make_equality_group(lambda: cirq.ParamResolver({'a': 0.0}))
     et.add_equality_group(cirq.ParamResolver({'a': 0.1}))
     et.add_equality_group(cirq.ParamResolver({'a': 0.0, 'b': 0.1}))
     et.add_equality_group(cirq.ParamResolver({'a': 0.3, 'b': 0.1}))
     et.add_equality_group(cirq.ParamResolver({'b': 0.1}))
     et.add_equality_group(cirq.ParamResolver({'c': 0.1}))
+
+
+def test_repr():
+    cirq.testing.assert_equivalent_repr(cirq.ParamResolver())
+    cirq.testing.assert_equivalent_repr(cirq.ParamResolver({'a': 2.0}))
